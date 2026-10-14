@@ -3,4 +3,17 @@ target-version = "py314"
 extend-exclude = [".venv"]
 
 [lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["ALL"]
+ignore = [
+    "D203", "D213", "COM812", "ISC001", "CPY001",  # contradict other rules or the formatter / need a policy
+    "D10",  # the docstrings that exist are noun-phrase descriptions; not every helper needs one
+    "D205", "D401",  # docstring summary style
+    "ANN401",  # the code walks arbitrary JSON/YAML documents
+    "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0917",  # the emitters are long straight-line renderers
+    "FBT",  # boolean flags are part of the internal helper signatures
+    "TRY003", "EM101", "EM102",  # short, specific messages are raised where they occur
+]
+
+[lint.per-file-ignores]
+"src/openapi_codegen/runtime/*" = ["RUF100"]  # their noqa comments are for the generated package's lint config
+"tests/**" = ["S101", "PLC0415", "S603", "PLR2004", "ANN", "INP001", "SLF001", "ARG", "S106"]

@@ -75,6 +75,7 @@ def _import_with_missing(parent: Path, module: str, *missing: str) -> subprocess
         env={**os.environ, "PYTHONPATH": str(parent)},
         capture_output=True,
         text=True,
+        check=False,
     )
 
 
@@ -160,10 +161,17 @@ def test_a_narrower_set_is_still_independent_of_the_hash_seed(tmp_path):
     out = tmp_path / "gen"
     cli = [sys.executable, "-m", "openapi_codegen", str(DEVICE_SPEC), "--out", str(out), "--only", "clients"]
 
-    written = subprocess.run(cli, cwd=ROOT, env={**os.environ, "PYTHONHASHSEED": "1"}, capture_output=True, text=True)
+    written = subprocess.run(
+        cli, cwd=ROOT, env={**os.environ, "PYTHONHASHSEED": "1"}, capture_output=True, text=True, check=False
+    )
     assert written.returncode == 0, written.stderr
     for seed in (2, 3, 4):
         checked = subprocess.run(
-            [*cli, "--check"], cwd=ROOT, env={**os.environ, "PYTHONHASHSEED": str(seed)}, capture_output=True, text=True
+            [*cli, "--check"],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert checked.returncode == 0, f"seed {seed}:\n{checked.stderr}"

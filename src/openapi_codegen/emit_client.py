@@ -1,10 +1,13 @@
 """Writing `clients/<route>.py`: a class per route with one method per HTTP verb."""
 
 import textwrap
+from typing import TYPE_CHECKING
 
 from .emit_models import HEADER, stdlib_import_lines, write_local_imports
-from .operations import Operation, Route
 from .writer import Arg, CodeWriter, Raw, argument
+
+if TYPE_CHECKING:
+    from .operations import Operation, Route
 
 MAX_ARGUMENTS = 5  # ruff's PLR0913 and PLR0917 limits (a method's `self` is not counted)
 
@@ -51,8 +54,9 @@ def _render_method(w: CodeWriter, route: Route, operation: Operation) -> None:
     body = operation.body
 
     arguments: list[str | Arg] = ["self"]
-    for p in path_params:
-        arguments.append(argument(f"{p.name}: {p.plain.expr}", p.name, positional_bool=p.plain.expr == "bool"))
+    arguments.extend(
+        argument(f"{p.name}: {p.plain.expr}", p.name, positional_bool=p.plain.expr == "bool") for p in path_params
+    )
     positional = len(path_params)
     if body and body.required:
         arguments.append(f"body: {body.plain.expr}")

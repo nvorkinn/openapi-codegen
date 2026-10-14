@@ -1,7 +1,8 @@
 """Reading JSON Schema out of an OpenAPI document into Python types and Pydantic model definitions.
 
 `Schemas.type_of` turns any schema into a `TypeRef` (a Python type expression plus what it needs), registering
-a model for every object it meets along the way. `Schemas.finish` returns them all."""
+a model for every object it meets along the way. `Schemas.finish` returns them all.
+"""
 
 import sys
 from dataclasses import dataclass, field
@@ -25,7 +26,8 @@ _SCALAR_DEFAULTS = (str, int, float, bool)
 @dataclass(frozen=True)
 class TypeRef:
     """A Python type expression and what it needs: the generated classes it names (`deps`) and the
-    symbols it takes from typing, datetime, uuid and pydantic (`imports`)."""
+    symbols it takes from typing, datetime, uuid and pydantic (`imports`).
+    """
 
     expr: str
     deps: frozenset[str] = frozenset()
@@ -119,7 +121,7 @@ class SpecError(ValueError):
 
 
 def warn(message: str) -> None:
-    print(f"warning: {message}", file=sys.stderr)
+    sys.stderr.write(f"warning: {message}\n")
 
 
 class Schemas:
@@ -150,8 +152,8 @@ class Schemas:
                 raise SpecError(f"$ref cycle through {ref!r}")
             seen.add(ref)
             target: Any = self.document
-            for part in ref[2:].split("/"):
-                part = part.replace("~1", "/").replace("~0", "~")
+            for segment in ref[2:].split("/"):
+                part = segment.replace("~1", "/").replace("~0", "~")
                 try:
                     target = target[part]
                 except KeyError, TypeError:
@@ -163,7 +165,8 @@ class Schemas:
 
     def type_of(self, schema: Any, hint: str, constraints: bool = True) -> TypeRef:
         """The Python type for `schema`. Inline objects become models named after `hint`. With `constraints`
-        false, length/range limits are left out (a client's signature has no use for them)."""
+        false, length/range limits are left out (a client's signature has no use for them).
+        """
         if schema is True or schema == {} or schema is None:
             return TypeRef("Any", imports=frozenset({"Any"}))
         if schema is False:
@@ -311,14 +314,15 @@ class Schemas:
         properties: dict[str, Any] = {}
         required: list[str] = []
         parts = [*schema.get("allOf", []), schema]
-        for part in parts:
-            if part is not schema and "$ref" in part:
-                target = part["$ref"]
-                if target in self._component_names and self._is_object(self.resolve(part)):
+        for member in parts:
+            part = member
+            if member is not schema and "$ref" in member:
+                target = member["$ref"]
+                if target in self._component_names and self._is_object(self.resolve(member)):
                     model.bases.append(self._component_names[target])
                     continue
-                part = self.resolve(part)
-            if part is not schema and part.get("allOf"):
+                part = self.resolve(member)
+            if member is not schema and part.get("allOf"):
                 warn(f"{name}: nested allOf; its properties are merged in")
             properties.update(part.get("properties", {}))
             required.extend(part.get("required", []))
@@ -329,7 +333,7 @@ class Schemas:
 
         taken: set[str] = set()
         for wire, sub in properties.items():
-            attribute, aliased = field_name(wire)
+            attribute, _ = field_name(wire)
             while attribute in taken:
                 attribute += "_"
             taken.add(attribute)

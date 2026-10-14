@@ -43,8 +43,7 @@ def snake(text: str) -> str:
     """`X-Device-Name` -> `x_device_name`, `pageSize` -> `page_size`, `HTTPHeader` -> `http_header`."""
     text = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", text)
     text = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
-    text = re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_").lower()
-    return text
+    return re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_").lower()
 
 
 def pascal(text: str) -> str:
@@ -69,7 +68,8 @@ def field_name(wire: str) -> tuple[str, bool]:
     """The model attribute for a JSON property, and whether it needs an alias back to `wire`.
 
     A property that is already a usable snake_case identifier keeps its name, so the model mirrors the payload;
-    any other (`birthDate`) gets a snake_case attribute and an alias."""
+    any other (`birthDate`) gets a snake_case attribute and an alias.
+    """
     usable = (
         is_identifier(wire)
         and snake(wire) == wire

@@ -1,5 +1,6 @@
 """The generated server side: registering handlers and authenticators, checking them against the spec, and
-serving requests (authenticating, injecting what the authenticator provides, applying decorators)."""
+serving requests (authenticating, injecting what the authenticator provides, applying decorators).
+"""
 
 import functools
 import json
@@ -121,7 +122,7 @@ def test_a_403_from_any_alternative_beats_a_401(auth_api):
     api, _ = build(auth_api)
     from auth_api.blueprints import ApiHTTPError
 
-    api._authenticators["deviceSecret"].clear()  # noqa: SLF001
+    api._authenticators["deviceSecret"].clear()
 
     @api.authenticator("deviceSecret", provides=("device_id",))
     def picky(context):
@@ -132,7 +133,7 @@ def test_a_403_from_any_alternative_beats_a_401(auth_api):
 
 
 def test_every_scheme_of_an_alternative_has_to_pass(auth_api):
-    api, calls = build(auth_api)
+    api, _ = build(auth_api)
     client = client_for(api)
 
     assert client.get("/api/admin", headers=bearer("r-secret")).status_code == 401
@@ -167,7 +168,7 @@ def test_authentication_comes_before_validation(auth_api):
 
 def test_an_authenticator_that_returns_other_names_than_it_declared_is_a_500(auth_api, caplog):
     api, _ = build(auth_api)
-    api._authenticators["deviceSecret"][0] = type(api._authenticators["deviceSecret"][0])(  # noqa: SLF001
+    api._authenticators["deviceSecret"][0] = type(api._authenticators["deviceSecret"][0])(
         lambda context: {"surprise": 1}, ("device_id",)
     )
 
@@ -253,8 +254,10 @@ def test_everything_that_is_missing_is_reported_at_once(auth_api):
         "no handler is registered for get_label (GET /api/labels/<label_id>)",
         "no handler is registered for set_label (PUT /api/labels/<label_id>)",
         "no handler is registered for health (GET /health)",
-        "no authenticator is registered for the security scheme 'deviceSecret' "
-        "(used by admin_summary, create_pairing_code, get_config, get_label, set_label)",
+        (
+            "no authenticator is registered for the security scheme 'deviceSecret' "
+            "(used by admin_summary, create_pairing_code, get_config, get_label, set_label)"
+        ),
         "no authenticator is registered for the security scheme 'userHeader' (used by admin_summary)",
     ]
 
@@ -312,7 +315,7 @@ def test_a_handler_cannot_require_what_nobody_provides(auth_api):
 
 def test_a_provided_name_cannot_shadow_an_api_parameter(auth_api):
     api, _ = build(auth_api)
-    api._authenticators["deviceSecret"].clear()  # noqa: SLF001
+    api._authenticators["deviceSecret"].clear()
     api.authenticator("deviceSecret", provides=("label_id", "device_id"))(lambda context: None)
 
     found = problems(api)
