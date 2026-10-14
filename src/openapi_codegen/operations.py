@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .naming import Names, parameter_name, pascal, snake
+from .naming import Names, method_name, parameter_name, pascal, snake
 from .schema import Schemas, SpecError, TypeRef, warn
 
 METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
@@ -60,6 +60,18 @@ class Operation:
     responses: list[ResponseDef]
     security: list[dict[str, dict[str, Any]]]
     deprecated: bool = False
+    operation_id: str = ""  # as the spec spells it, if it does
+    id: str = ""  # the unique Python name: the registration method on `Api` is called this
+
+    @property
+    def constant(self) -> str:
+        """The name of the generated `Operation` constant."""
+        return self.id.upper()
+
+    @property
+    def class_prefix(self) -> str:
+        """PascalCase stem of the generated classes (`GetConfig` for `get_config`)."""
+        return pascal(self.id)
 
     @property
     def success(self) -> list[ResponseDef]:
@@ -171,7 +183,28 @@ class Operations:
             if route.operations:
                 self._check_path_parameters(route)
                 routes.append(route)
+        self._name_operations(routes)
         return routes
+
+    @staticmethod
+    def _name_operations(routes: list[Route]) -> None:
+        """Give every operation a unique Python name: its operationId, else the route's module and the verb."""
+        names = Names()
+        spelled: dict[str, str] = {}
+        for operation in (op for route in routes for op in route.operations if op.operation_id):
+            name = method_name(operation.operation_id)
+            if name in spelled:
+                raise SpecError(
+                    f"the operationIds {spelled[name]!r} and {operation.operation_id!r} both become {name!r}"
+                    if spelled[name] != operation.operation_id
+                    else f"the operationId {name!r} is used by more than one operation"
+                )
+            spelled[name] = operation.operation_id
+            operation.id = names.reserve(name)
+        for route in routes:
+            for operation in route.operations:
+                if not operation.id:
+                    operation.id = names.reserve(method_name(f"{route.module}_{operation.method}"))
 
     # -- one operation --------------------------------------------------------------------------------
 
@@ -190,6 +223,7 @@ class Operations:
             responses=self._responses(hint, node.get("responses", {})),
             security=self._security(node.get("security", self.document.get("security", []))),
             deprecated=bool(node.get("deprecated")),
+            operation_id=str(node.get("operationId") or ""),
         )
 
     def _params(self, route: Route, hint: str, raw: list[Any]) -> list[Param]:

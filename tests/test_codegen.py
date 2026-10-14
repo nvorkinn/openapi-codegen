@@ -1,151 +1,16 @@
-import importlib
 import json
 import os
 import subprocess
 import sys
 import uuid
-from pathlib import Path
-from urllib.parse import urlsplit
 
 import pytest
 import requests
 from flask import Flask
 from pydantic import ValidationError
+from support import DEVICE_SPEC, RICH_SPEC, ROOT, FlaskSession
 
 from openapi_codegen.__main__ import main
-
-ROOT = Path(__file__).resolve().parents[1]
-# A copy of auth-broker's openapi.json: a real, small spec with a secured route, a header and nullable fields.
-DEVICE_SPEC = ROOT / "tests" / "data" / "device_api.json"
-
-ERROR = {"$ref": "#/components/schemas/Error"}
-
-
-def _json(schema):
-    return {"application/json": {"schema": schema}}
-
-
-RICH_SPEC = {
-    "openapi": "3.1.0",
-    "info": {"title": "Pets", "version": "1"},
-    "paths": {
-        "/pets": {
-            "get": {
-                "summary": "List pets.",
-                "parameters": [
-                    {"name": "tag", "in": "query", "schema": {"type": "array", "items": {"type": "string"}}},
-                    {"name": "limit", "in": "query", "required": True, "schema": {"type": "integer"}},
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": _json({"type": "array", "items": {"$ref": "#/components/schemas/Pet"}}),
-                    }
-                },
-            },
-            "post": {
-                "summary": "Create a pet.",
-                "requestBody": {"required": True, "content": _json({"$ref": "#/components/schemas/NewPet"})},
-                "responses": {
-                    "201": {"description": "Created", "content": _json({"$ref": "#/components/schemas/Pet"})},
-                    "422": {"description": "Bad", "content": _json(ERROR)},
-                },
-            },
-        },
-        "/pets/{petId}": {
-            "parameters": [{"name": "petId", "in": "path", "required": True, "schema": {"type": "integer"}}],
-            "get": {
-                "responses": {
-                    "200": {"description": "OK", "content": _json({"$ref": "#/components/schemas/Pet"})},
-                    "404": {"description": "Missing", "content": _json(ERROR)},
-                },
-            },
-            "put": {
-                "parameters": [{"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}}],
-                "requestBody": {"content": _json({"$ref": "#/components/schemas/NewPet"})},
-                "responses": {"200": {"description": "OK", "content": _json({"$ref": "#/components/schemas/Pet"})}},
-            },
-            "delete": {"responses": {"204": {"description": "Gone"}}},
-        },
-    },
-    "components": {
-        "schemas": {
-            "Error": {
-                "type": "object",
-                "properties": {"error": {"type": "string"}},
-                "required": ["error"],
-            },
-            "NewPet": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "minLength": 1},
-                    "kind": {"enum": ["cat", "dog"], "type": "string"},
-                    "birthDate": {"type": "string", "format": "date"},
-                    "nick-name": {"type": "string"},
-                    "weight": {"type": "number", "default": 1.5},
-                    "parent": {"$ref": "#/components/schemas/Pet"},
-                },
-                "required": ["name", "kind"],
-            },
-            "Pet": {
-                "allOf": [
-                    {"$ref": "#/components/schemas/NewPet"},
-                    {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer"},
-                            "token": {"type": "string", "format": "uuid"},
-                            "owner": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                        },
-                        "required": ["id", "owner"],
-                    },
-                ],
-            },
-        }
-    },
-}
-
-
-class FlaskSession(requests.Session):
-    """A requests session whose calls are answered by a Flask test client."""
-
-    def __init__(self, app):
-        super().__init__()
-        self.client = app.test_client()
-        self.calls = []
-
-    def request(self, method, url, params=None, headers=None, json=None, cookies=None, timeout=None, **_):
-        self.calls.append((method, url))
-        response = self.client.open(urlsplit(url).path, method=method, query_string=params, headers=headers, json=json)
-        result = requests.Response()
-        result.status_code = response.status_code
-        result._content = response.data
-        result.headers.update(response.headers)
-        return result
-
-
-def _generate(tmp_path, spec, name):
-    source = tmp_path / f"{name}.json"
-    source.write_text(json.dumps(spec))
-    out = tmp_path / name
-    assert main([str(source), "--out", str(out)]) == 0
-    sys.path.insert(0, str(tmp_path))
-    try:
-        yield importlib.import_module(name)
-    finally:
-        sys.path.remove(str(tmp_path))
-        for module in [m for m in sys.modules if m == name or m.startswith(f"{name}.")]:
-            del sys.modules[module]
-
-
-@pytest.fixture
-def device_api(tmp_path):
-    yield from _generate(tmp_path, json.loads(DEVICE_SPEC.read_text()), "device_api")
-
-
-@pytest.fixture
-def pets_api(tmp_path):
-    yield from _generate(tmp_path, RICH_SPEC, "pets_api")
 
 
 def _config(models, **overrides):
@@ -183,22 +48,24 @@ def test_models_required_and_nullable(device_api):
 
 def test_client_and_blueprint_round_trip(device_api):
     from device_api import models
-    from device_api.blueprints import api_config as blueprint
+    from device_api.blueprints import Api, ApiHTTPError
     from device_api.clients import ApiConfigClient, ApiError
 
     seen = {}
+    api = Api()
 
-    class View(blueprint.ApiConfigView):
-        def authenticate(self, security):
-            if self.bearer_token() != "secret":
-                raise blueprint.ApiHTTPError(401, message="Missing or unknown secret.")
+    @api.authenticator("deviceSecret")
+    def device_secret(context):
+        if context.credential != "secret":
+            raise ApiHTTPError(401, message="Missing or unknown secret.")
 
-        def handle_get(self, *, x_device_name=None):
-            seen["name"] = x_device_name
-            return _config(models)
+    @api.api_config_get()
+    def get_config(*, x_device_name=None):
+        seen["name"] = x_device_name
+        return _config(models)
 
     app = Flask(__name__)
-    app.register_blueprint(blueprint.create_blueprint(View))
+    api.register(app)
     session = FlaskSession(app)
 
     client = ApiConfigClient("http://broker", session, auth_token="secret")
@@ -214,38 +81,28 @@ def test_client_and_blueprint_round_trip(device_api):
     assert caught.value.body == models.Error(error="Missing or unknown secret.")
 
 
-def test_unimplemented_routes_are_refused(device_api):
-    from device_api.blueprints import api_config, register_all
+def test_an_api_with_nothing_registered_is_refused(device_api):
+    from device_api.blueprints import Api, RegistrationError
 
-    with pytest.raises(ValueError):
-        register_all(Flask(__name__))
-
-    class Partial(api_config.ApiConfigView):
-        pass
-
-    with pytest.raises(NotImplementedError, match="handle_get"):
-        api_config.create_blueprint(Partial)
-    with pytest.raises(NotImplementedError):
-        register_all(Flask(__name__), Partial)
+    with pytest.raises(RegistrationError) as caught:
+        Api().register(Flask(__name__))
+    assert caught.value.problems == [
+        "no handler is registered for api_config_get (GET /api/config)",
+        "no authenticator is registered for the security scheme 'deviceSecret' (used by api_config_get)",
+    ]
 
 
-def test_register_all_matches_subclasses(device_api):
-    from device_api.blueprints import api_config, register_all
+def test_register_adds_the_routes_under_the_prefix(device_api):
+    from device_api.blueprints import Api
 
-    class View(api_config.ApiConfigView):
-        def authenticate(self, security):
-            return None
-
-        def handle_get(self, *, x_device_name=None):
-            return None
+    api = Api()
+    api.authenticator("deviceSecret")(lambda context: None)
+    api.api_config_get()(lambda *, x_device_name=None: None)
 
     app = Flask(__name__)
-    register_all(app, View, url_prefix="/v1")
+    api.register(app, url_prefix="/v1")
     assert [rule.rule for rule in app.url_map.iter_rules() if rule.endpoint != "static"] == ["/v1/api/config"]
-    with pytest.raises(ValueError):
-        register_all(Flask(__name__), View, View)
-    with pytest.raises(ValueError):
-        register_all(Flask(__name__), int)  # type: ignore[arg-type]
+    assert [rule.endpoint for rule in app.url_map.iter_rules() if rule.endpoint != "static"] == ["api.api_config_get"]
 
 
 def test_client_without_session_uses_requests_request(device_api, monkeypatch):
@@ -271,7 +128,7 @@ def test_rich_models(pets_api):
 
     pet = models.NewPet(name="Tom", kind="cat")
     assert pet.weight == 1.5
-    assert pet.birthDate is None and pet.parent is None
+    assert pet.birth_date is None and pet.parent is None
     with pytest.raises(ValidationError):
         models.NewPet(name="", kind="cat")
     with pytest.raises(ValidationError):
@@ -321,40 +178,42 @@ def test_rich_signatures(pets_api):
 
 def test_rich_round_trip(pets_api):
     from pets_api import models
-    from pets_api.blueprints import pets as pets_bp
-    from pets_api.blueprints import pets_by_pet_id as by_id_bp
-    from pets_api.blueprints import register_all
+    from pets_api.blueprints import Api, ApiHTTPError
     from pets_api.clients import ApiError
     from pets_api.clients.pets import PetsClient
     from pets_api.clients.pets_by_pet_id import PetsByPetIdClient
 
     store = {}
+    api = Api()
 
-    class Pets(pets_bp.PetsView):
-        def handle_get(self, *, limit, tag=None):
-            return [pet for pet in store.values() if tag is None or pet.name in tag][:limit]
+    @api.pets_get()
+    def list_pets(*, limit, tag=None):
+        return [pet for pet in store.values() if tag is None or pet.name in tag][:limit]
 
-        def handle_post(self, *, body):
-            pet = models.Pet(id=len(store) + 1, owner=None, **body.model_dump())
-            store[pet.id] = pet
-            return pet, 201
+    @api.pets_post()
+    def create_pet(*, body):
+        pet = models.Pet(id=len(store) + 1, owner=None, **body.model_dump())
+        store[pet.id] = pet
+        return pet, 201
 
-    class ById(by_id_bp.PetsByPetIdView):
-        def handle_get(self, *, pet_id):
-            if pet_id not in store:
-                raise by_id_bp.ApiHTTPError(404, message="no such pet")
-            return store[pet_id]
+    @api.pets_by_pet_id_get()
+    def get_pet(*, pet_id):
+        if pet_id not in store:
+            raise ApiHTTPError(404, message="no such pet")
+        return store[pet_id]
 
-        def handle_put(self, *, pet_id, if_match, body=None):
-            assert if_match == "v1"
-            store[pet_id] = store[pet_id].model_copy(update={"name": body.name})
-            return store[pet_id]
+    @api.pets_by_pet_id_put()
+    def put_pet(*, pet_id, if_match, body=None):
+        assert if_match == "v1"
+        store[pet_id] = store[pet_id].model_copy(update={"name": body.name})
+        return store[pet_id]
 
-        def handle_delete(self, *, pet_id):
-            del store[pet_id]
+    @api.pets_by_pet_id_delete()
+    def delete_pet(*, pet_id):
+        del store[pet_id]
 
     app = Flask(__name__)
-    register_all(app, Pets, ById)
+    api.register(app)
     session = FlaskSession(app)
     pets = PetsClient("http://x", session)
     by_id = PetsByPetIdClient("http://x", session)

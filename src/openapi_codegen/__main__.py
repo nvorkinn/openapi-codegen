@@ -1,4 +1,4 @@
-"""Command line: `python -m openapi_codegen SPEC --out DIR [--only PARTS] [--check]`."""
+"""Command line: `python -m openapi_codegen SPEC --out DIR [--only PARTS] [--package NAME] [--check]`."""
 
 import argparse
 import sys
@@ -27,6 +27,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--package",
+        metavar="NAME",
+        help=(
+            "the dotted name the output is imported as (e.g. my_api), to import the models absolutely rather than "
+            "relatively, for linters that ban parent-relative imports (default: relative imports)"
+        ),
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="write nothing; exit 1 if the files under --out differ from what would be generated",
@@ -38,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(error))
 
     try:
-        files = generate(load(args.spec), source=args.spec.name, only=parts)
+        files = generate(load(args.spec), source=args.spec.name, only=parts, package=args.package)
     except (SpecError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

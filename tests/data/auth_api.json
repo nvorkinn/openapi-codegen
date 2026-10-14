@@ -1,0 +1,98 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Devices", "version": "1"},
+  "paths": {
+    "/api/config": {
+      "get": {
+        "operationId": "getConfig",
+        "summary": "Read the renderer's config.",
+        "parameters": [
+          {"name": "X-Device-Name", "in": "header", "required": false, "schema": {"type": "string"}}
+        ],
+        "security": [{"deviceSecret": ["renderer"]}],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Config"}}}},
+          "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "403": {"description": "Forbidden", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/devices/pairing-code": {
+      "post": {
+        "operationId": "createPairingCode",
+        "summary": "Force a fresh pairing code.",
+        "description": "A screen can ask too, since a device that has no renderer yet has nothing else to show one.",
+        "security": [{"deviceSecret": ["renderer"]}, {"deviceSecret": ["display"]}],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PairingCode"}}}},
+          "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/labels/{labelId}": {
+      "parameters": [{"name": "labelId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "get": {
+        "operationId": "getLabel",
+        "security": [{"deviceSecret": []}],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Label"}}}},
+          "404": {"description": "Missing", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      },
+      "put": {
+        "operationId": "setLabel",
+        "security": [{"deviceSecret": []}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Label"}}}},
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Label"}}}}
+        }
+      }
+    },
+    "/api/admin": {
+      "get": {
+        "operationId": "adminSummary",
+        "summary": "Needs a device secret and a signed-in user.",
+        "security": [{"deviceSecret": ["renderer"], "userHeader": []}],
+        "responses": {
+          "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Label"}}}}
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "security": [],
+        "responses": {"204": {"description": "Healthy"}}
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "deviceSecret": {"type": "http", "scheme": "bearer"},
+      "userHeader": {"type": "apiKey", "in": "header", "name": "X-User"}
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {"error": {"type": "string"}},
+        "required": ["error"]
+      },
+      "Config": {
+        "type": "object",
+        "description": "What a renderer needs to draw.",
+        "properties": {"device_id": {"type": "string"}, "interval": {"type": "integer"}},
+        "required": ["device_id", "interval"]
+      },
+      "PairingCode": {
+        "type": "object",
+        "properties": {"code": {"type": "string"}, "expires_in_seconds": {"type": "integer"}},
+        "required": ["code", "expires_in_seconds"]
+      },
+      "Label": {
+        "type": "object",
+        "properties": {"text": {"type": "string", "minLength": 1}},
+        "required": ["text"]
+      }
+    }
+  }
+}
