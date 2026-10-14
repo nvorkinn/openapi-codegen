@@ -140,7 +140,7 @@ class CodeWriter:
         for row in docstring_lines(parts, self.column):
             self.line(row)
 
-    def block(self, header: str | None = None) -> "_Block":
+    def block(self, header: str | None = None) -> _Block:
         """`with w.block("class A:"):` writes the header and indents what follows (no header: only indents)."""
         if header is not None:
             self.line(header)

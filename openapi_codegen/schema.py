@@ -32,7 +32,7 @@ class TypeRef:
     imports: frozenset[str] = frozenset()
     nullable: bool = False
 
-    def with_none(self) -> "TypeRef":
+    def with_none(self) -> TypeRef:
         if self.nullable:
             return self
         return TypeRef(f"{self.expr} | None", self.deps, self.imports, True)
@@ -154,7 +154,7 @@ class Schemas:
                 part = part.replace("~1", "/").replace("~0", "~")
                 try:
                     target = target[part]
-                except (KeyError, TypeError):
+                except KeyError, TypeError:
                     raise SpecError(f"unresolvable $ref {ref!r}") from None
             node = target
         return node

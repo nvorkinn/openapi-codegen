@@ -55,7 +55,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       # Only the files that get built carry this version; nothing is committed. --frozen: no lockfile, no sync.
       - name: Stamp version
         run: |
