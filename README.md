@@ -76,3 +76,7 @@ python -m pytest
 
 `tests/data/device_api.json` is a copy of [auth-broker](https://github.com/nvorkinn/auth-broker)'s
 `openapi.json`, used as a small real-world spec.
+
+## License
+
+[MIT](LICENSE).

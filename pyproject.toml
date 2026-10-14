@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "Generate Pydantic models, requests clients and extensible Flask blueprints from an OpenAPI 3.x document (JSON or YAML)."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 # The generator itself needs nothing beyond the standard library. The code it writes needs pydantic
 # (models), requests (clients) and flask (blueprints); see the README.
 dependencies = []
