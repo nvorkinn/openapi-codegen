@@ -16,27 +16,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          enable-cache: true
 
       - name: Install
-        run: pip install -e ".[test]"
+        run: uv sync --frozen --python ${{ matrix.python-version }}
 
       - name: Lint
-        run: ruff check .
+        run: uv run --frozen ruff check .
 
       - name: Check formatting
-        run: ruff format --check .
+        run: uv run --frozen ruff format --check .
 
       - name: Test
-        run: python -m pytest -v
+        run: uv run --frozen pytest -v
 
   # The tests run against the source tree, which has files the wheel might leave out (runtime/ is data, not a
   # package). Install the built wheel somewhere clean and generate from it.
@@ -45,16 +43,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v5
 
       - name: Build and install the wheel
         run: |
-          pip install build
-          python -m build --wheel
-          python -m venv /tmp/clean
-          /tmp/clean/bin/pip install dist/*.whl
+          uv build --wheel --python 3.14
+          uv venv --python 3.14 /tmp/clean
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
 
       - name: Generate from the installed wheel
         working-directory: /tmp

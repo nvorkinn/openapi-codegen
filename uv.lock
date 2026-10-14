@@ -281,7 +281,12 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
-test = [
+yaml = [
+    { name = "pyyaml" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "flask" },
     { name = "pydantic" },
     { name = "pytest" },
@@ -289,21 +294,20 @@ test = [
     { name = "requests" },
     { name = "ruff" },
 ]
-yaml = [
-    { name = "pyyaml" },
-]
 
 [package.metadata]
-requires-dist = [
-    { name = "flask", marker = "extra == 'test'" },
-    { name = "pydantic", marker = "extra == 'test'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pyyaml", marker = "extra == 'test'" },
-    { name = "pyyaml", marker = "extra == 'yaml'" },
-    { name = "requests", marker = "extra == 'test'" },
-    { name = "ruff", marker = "extra == 'test'", specifier = "==0.16.10" },
+requires-dist = [{ name = "pyyaml", marker = "extra == 'yaml'" }]
+provides-extras = ["yaml"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "flask" },
+    { name = "pydantic" },
+    { name = "pytest" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "ruff", specifier = "==0.16.10" },
 ]
-provides-extras = ["yaml", "test"]
 
 [[package]]
 name = "packaging"
