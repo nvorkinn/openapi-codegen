@@ -151,7 +151,7 @@ def _handle(response: requests.Response, responses: Mapping[int | str, Any]) -> 
     if status >= 400:
         try:
             body = _fallback(response) if declared is None else _decode(response, responses[declared])
-        except (ValidationError, ValueError):
+        except ValidationError, ValueError:
             body = response.text
         raise ApiError(status, body, response)
     if declared is None:
