@@ -1,4 +1,4 @@
-"""Command line: `python -m tools.openapi_codegen SPEC --out DIR [--check]`."""
+"""Command line: `python -m openapi_codegen SPEC --out DIR [--check]`."""
 
 import argparse
 import sys
@@ -10,7 +10,7 @@ from .schema import SpecError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m tools.openapi_codegen",
+        prog="openapi-codegen",
         description=(
             "Generate Pydantic models, requests clients and Flask blueprints from an OpenAPI 3.x JSON or YAML file."
         ),

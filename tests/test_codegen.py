@@ -12,9 +12,11 @@ import requests
 from flask import Flask
 from pydantic import ValidationError
 
-from tools.openapi_codegen.__main__ import main
+from openapi_codegen.__main__ import main
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+# A copy of auth-broker's openapi.json: a real, small spec with a secured route, a header and nullable fields.
+DEVICE_SPEC = ROOT / "tests" / "data" / "device_api.json"
 
 ERROR = {"$ref": "#/components/schemas/Error"}
 
@@ -138,7 +140,7 @@ def _generate(tmp_path, spec, name):
 
 @pytest.fixture
 def device_api(tmp_path):
-    yield from _generate(tmp_path, json.loads((ROOT / "openapi.json").read_text()), "device_api")
+    yield from _generate(tmp_path, json.loads(DEVICE_SPEC.read_text()), "device_api")
 
 
 @pytest.fixture
@@ -368,7 +370,7 @@ def test_rich_round_trip(pets_api):
 
 def test_check_detects_stale_output(tmp_path):
     out = tmp_path / "gen"
-    spec = ROOT / "openapi.json"
+    spec = DEVICE_SPEC
     assert main([str(spec), "--out", str(out)]) == 0
     assert main([str(spec), "--out", str(out), "--check"]) == 0
     (out / "models.py").write_text("# edited\n")
@@ -381,7 +383,7 @@ def test_check_detects_stale_output(tmp_path):
 def _cli(*args, seed):
     """The command line in a fresh process, as CI runs it, with Python's string hashing seeded as given."""
     return subprocess.run(
-        [sys.executable, "-m", "tools.openapi_codegen", *map(str, args)],
+        [sys.executable, "-m", "openapi_codegen", *map(str, args)],
         cwd=ROOT,
         env={**os.environ, "PYTHONHASHSEED": str(seed)},
         capture_output=True,
@@ -393,7 +395,7 @@ def _cli(*args, seed):
 def test_output_does_not_depend_on_the_hash_seed(tmp_path, which):
     """Iterating a set is in a different order in every process, so anything generated from one would pass
     --check where it was written and fail it in CI. The in-process test above can't see that."""
-    spec = ROOT / "openapi.json"
+    spec = DEVICE_SPEC
     if which == "rich":
         spec = tmp_path / "rich.json"
         spec.write_text(json.dumps(RICH_SPEC))

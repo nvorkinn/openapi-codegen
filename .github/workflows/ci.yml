@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[test]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Test
+        run: python -m pytest -v
+
+  # The tests run against the source tree, which has files the wheel might leave out (runtime/ is data, not a
+  # package). Install the built wheel somewhere clean and generate from it.
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Build and install the wheel
+        run: |
+          pip install build
+          python -m build --wheel
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+
+      - name: Generate from the installed wheel
+        working-directory: /tmp
+        run: |
+          /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api
+          test -f /tmp/out/device_api/clients/_base.py
+          test -f /tmp/out/device_api/blueprints/_base.py
+          /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api --check

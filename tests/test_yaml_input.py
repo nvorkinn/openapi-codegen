@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tools.openapi_codegen.__main__ import main
-from tools.openapi_codegen.generate import generate, load
-from tools.openapi_codegen.schema import SpecError
+from openapi_codegen.__main__ import main
+from openapi_codegen.generate import generate, load
+from openapi_codegen.schema import SpecError
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+# A copy of auth-broker's openapi.json: a real, small spec with a secured route, a header and nullable fields.
+DEVICE_SPEC = ROOT / "tests" / "data" / "device_api.json"
 
 HAND_WRITTEN = """\
 openapi: 3.1.0
@@ -52,14 +54,14 @@ def _write(tmp_path, name, text):
 
 @pytest.mark.parametrize("name", ["spec.yaml", "spec.yml", "SPEC.YAML"])
 def test_the_repos_own_spec_in_yaml_generates_exactly_what_the_json_does(tmp_path, name):
-    document = json.loads((ROOT / "openapi.json").read_text())
+    document = json.loads(DEVICE_SPEC.read_text())
     path = _write(tmp_path, name, yaml.safe_dump(document, sort_keys=False))
 
     assert generate(load(path)) == generate(document)
 
 
 def test_json_written_to_a_yaml_file_is_read(tmp_path):
-    document = json.loads((ROOT / "openapi.json").read_text())
+    document = json.loads(DEVICE_SPEC.read_text())
     assert load(_write(tmp_path, "spec.yaml", json.dumps(document))) == document
 
 
