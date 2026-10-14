@@ -3,8 +3,9 @@ name: Release
 # Builds the package when a GitHub release is published and attaches the wheel, the sdist and their checksums to
 # it, so other projects can depend on those files (a lockfile records the wheel's hash) instead of on a git tag.
 #
-# To release: raise `version` in pyproject.toml and merge it, then publish a release whose tag is v<version>.
-# If the tag and the version disagree this fails before building anything.
+# To release: publish a release whose tag is v<version>, e.g. v0.2.0. The package's version is taken from the tag
+# when it is built, so there is nothing to raise in pyproject.toml first (its `version` is only a placeholder for
+# checkouts) and no way for the two to disagree.
 #
 # To attach files to a release that already exists, run it by hand (Actions > Release > Run workflow) with its tag.
 
@@ -37,13 +38,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: The tag must match the package version
+      - uses: astral-sh/setup-uv@v5
+
+      # Only the files that get built carry this version; nothing is committed. --frozen: no lockfile, no sync.
+      - name: Set the version from the tag
         run: |
-          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::The tag is $TAG but pyproject.toml says version $version. Raise the version, merge, then publish the release as v<version>."
-            exit 1
-          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::The tag is $TAG, but release tags are v<version>, e.g. v0.2.0."; exit 1 ;;
+          esac
+          uv version --frozen --package openapi-codegen "${TAG#v}"
 
       - name: Build the wheel and the sdist
         run: |
@@ -57,6 +61,7 @@ jobs:
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/pip install dist/*.whl
+          /tmp/clean/bin/pip show openapi-codegen | grep '^Version'
           cd /tmp
           /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api
           /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api --check

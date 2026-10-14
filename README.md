@@ -95,13 +95,15 @@ python -m pytest
 
 ## Releasing
 
-1. Raise `version` in `pyproject.toml` and merge it.
-2. On GitHub, publish a release whose tag is `v<version>`.
+Publish a release on GitHub whose tag is `v<version>`, e.g. `v0.2.0`. That is all: the package's version is taken from
+the tag when it is built, so there is no version to raise first. (`version` in `pyproject.toml` is only a placeholder
+for source checkouts.)
 
-The [Release workflow](.github/workflows/release.yml) then builds the wheel and the sdist, installs the wheel into a
-clean environment and generates from it, and attaches the wheel, the sdist and `SHA256SUMS` to the release. It stops
-before building if the tag doesn't match `version`, and it never replaces a file already on a release. To attach
-files to a release that already exists, run the workflow by hand (Actions → Release → Run workflow) with its tag.
+The [Release workflow](.github/workflows/release.yml) then builds the wheel and the sdist at that version, installs the
+wheel into a clean environment and generates from it, and attaches the wheel, the sdist and `SHA256SUMS` to the
+release. It refuses a tag that isn't `v<version>` or isn't a valid version, and it never replaces a file already on
+a release. To attach files to a release that already exists, run the workflow by hand (Actions → Release → Run
+workflow) with its tag.
 
 ## License
 
