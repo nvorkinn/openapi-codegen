@@ -95,15 +95,23 @@ python -m pytest
 
 ## Releasing
 
-Publish a release on GitHub whose tag is `v<version>`, e.g. `v0.2.0`. That is all: the package's version is taken from
-the tag when it is built, so there is no version to raise first. (`version` in `pyproject.toml` is only a placeholder
-for source checkouts.)
+Push a tag `v<version>` from `main`, e.g. `git tag v0.2.0 && git push origin v0.2.0`. That is all: the package's version
+is stamped from the tag when it is built, so there is no version to raise first. (`version` in `pyproject.toml` is only
+a placeholder for source checkouts.)
 
-The [Release workflow](.github/workflows/release.yml) then builds the wheel and the sdist at that version, installs the
-wheel into a clean environment and generates from it, and attaches the wheel, the sdist and `SHA256SUMS` to the
-release. It refuses a tag that isn't `v<version>` or isn't a valid version, and it never replaces a file already on
-a release. To attach files to a release that already exists, run the workflow by hand (Actions → Release → Run
-workflow) with its tag.
+The [Release workflow](.github/workflows/release.yml), which follows pi-dashboard's, then:
+
+1. checks the tag points at a commit on `main`;
+2. builds the wheel and the sdist at that version, installs the wheel into a clean environment and generates from it;
+3. creates the GitHub release (with generated notes; a pre-release such as `v0.3.0rc1` is marked as one) with the
+   wheel, the sdist and `SHA256SUMS` attached, or, if a release for the tag already exists, adds the files to it.
+
+The release only appears once everything it ships has been built and tried. A file already on a release is never
+replaced, so a hash recorded in someone's lockfile stays valid. A tag that isn't `v<version>`, or isn't a valid
+version, stops the workflow before it builds anything.
+
+To build a tag that was pushed before the workflow existed (such as `v0.1.0`), run it by hand: Actions → Release →
+Run workflow, with the tag.
 
 ## License
 
