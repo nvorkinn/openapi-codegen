@@ -1,110 +1,73 @@
-"""Writing `blueprints/<route>.py`: a view class per route and a function that builds its Flask blueprint.
+"""Writing `blueprints/<route>.py` and `blueprints/__init__.py`.
 
-The view has one method per HTTP verb that does the plumbing (authenticate, read and validate the request,
-build the response) and calls an overridable `handle_<verb>` method with the validated values. A server
-subclasses the view and implements the handlers; the generated file is never edited."""
+A route module holds, per operation, its contract as data (an `Operation`) and the type of the handler that serves
+it. `blueprints/__init__.py` has the `Api` class: a `Registry` with one typed registration method per operation. All
+the behaviour (authenticating, reading the request, building the response, checking the registrations) is in
+`runtime/blueprint_base.py`, which is copied next to them as `_base.py`.
+"""
 
-from .emit_models import HEADER, render_field, stdlib_import_lines
+from typing import Any
+
+from .emit_models import HEADER, render_field, stdlib_import_lines, write_local_imports
 from .operations import Operation, Param, Route
 from .schema import FieldDef
-from .writer import WIDTH, CodeWriter, Raw, import_lines, quote
+from .writer import Arg, CodeWriter, Raw, argument, import_lines, inline, quote
+
+MAX_ARGUMENTS = 5  # ruff's PLR0913 limit (`self` and the injected `**kwargs` aren't counted)
 
 
-def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
+def render_blueprint(route: Route, model_names: set[str], source: str, models_module: str) -> str:
     deps: set[str] = set()
-    symbols: set[str] = set()
+    symbols: set[str] = {"Protocol"}
     for operation in route.operations:
         deps |= operation.type_deps()
-        symbols |= operation.type_imports(server=True)
-        if any(p.location == "path" for p in operation.params):
-            symbols.add("Any")
+        symbols |= operation.type_imports(server=True) | operation.type_imports(server=False)
     has_params = any(op.params for op in route.operations)
+    has_body = any(op.body for op in route.operations)
+    has_security = any(op.security for op in route.operations)
     pydantic: set[str] = set()
     if has_params:
         pydantic |= {"BaseModel", "ConfigDict"}
     if "Field" in symbols or any(p.name != p.wire or p.description for op in route.operations for p in op.params):
         pydantic.add("Field")
-    base_names = {"ApiHTTPError", "BaseView"} | ({"ParamSpec"} if has_params else set())
+    base_names = {"Operation", "Reply"}
+    if has_params:
+        base_names.add("Param")
+    if has_body:
+        base_names.add("Body")
+    if has_security:
+        base_names.add("SchemeUse")
 
     w = CodeWriter()
     w.line(HEADER.format(source=source))
-    w.line(f'"""Flask view and blueprint for ``{route.path}``."""')
+    w.line(f'"""The operations on ``{route.path}``: their contract and the types of their handlers."""')
     w.blank()
     w.line("from __future__ import annotations")
-    stdlib = stdlib_import_lines(symbols)
-    if stdlib:
-        w.blank()
-        for line in stdlib:
-            w.line(line)
     w.blank()
-    for line in import_lines("flask", ["Blueprint", "Response"]):
+    for line in stdlib_import_lines(symbols):
         w.line(line)
     if pydantic:
+        w.blank()
         for line in import_lines("pydantic", pydantic):
             w.line(line)
-    w.blank()
-    local = sorted(deps & model_names)
-    if local:
-        for line in import_lines("..models", local):
-            w.line(line)
-    for line in import_lines("._base", base_names):
-        w.line(line)
+    write_local_imports(w, models_module, deps & model_names, base_names)
 
-    for operation in route.operations:
-        constant = operation.method.upper()
+    for index, operation in enumerate(route.operations):
         if operation.params:
             w.blank(2)
             _render_params_model(w, operation)
-            w.blank(2)
-            w.statement(f"_{constant}_PARAMS = ", tuple(Raw(_param_spec(p)) for p in operation.params))
-        w.blank()
-        w.statement(f"_{constant}_RESPONSES = ", {r.status: Raw(r.expr) for r in operation.responses})
-        w.blank()
-        w.statement(f"_{constant}_SECURITY = ", operation.security)
-
-    w.blank(2)
-    with w.block(f"class {route.prefix}View(BaseView):"):
-        w.docstring(
-            f"Serves ``{route.path}``. Subclass it, implement every `handle_*` method and pass the "
-            "subclass to `create_blueprint`, which raises if one is left unimplemented."
-        )
-        for operation in route.operations:
-            w.blank()
-            _render_verb(w, route, operation)
-            w.blank()
-            _render_handler(w, route, operation)
-
-    w.blank(2)
-    view = f"{route.prefix}View"
-    w.line("def create_blueprint(")
-    w.line(f"    view: type[{view}] = {view},")
-    w.line("    *,")
-    w.line("    name: str | None = None,")
-    w.line("    url_prefix: str | None = None,")
-    w.line(") -> Blueprint:")
-    with w.block():
-        w.docstring(f"The blueprint for ``{route.path}``, served by `view` (``{view}`` or a subclass of it).")
-        handlers = tuple(f"handle_{op.method}" for op in route.operations)
-        w.line(f"missing = [n for n in {handlers!r} if getattr(view, n) is getattr({view}, n)]")
-        w.line("if missing:")
-        w.line("    raise NotImplementedError(f\"{view.__name__} does not implement {', '.join(missing)}\")")
-        w.line(f"blueprint = Blueprint(name or {quote(route.module)}, __name__, url_prefix=url_prefix)")
-        w.line(f"blueprint.add_url_rule({quote(route.flask_rule)}, view_func=view.as_view({quote(route.module)}))")
-        w.line("return blueprint")
+        # Only a class or function gets two blank lines after the imports.
+        w.blank(1 if index == 0 and not operation.params else 2)
+        _render_operation(w, route, operation)
+        w.blank(2)
+        _render_handler_type(w, route, operation)
     return w.getvalue()
 
 
-def _param_spec(param: Param) -> str:
-    arguments = [quote(param.wire), quote(param.location)]
-    if param.is_array:
-        arguments.append("multiple=True")
-    if param.location == "path":
-        arguments.append(f"key={quote(param.name)}")
-    return f"ParamSpec({', '.join(arguments)})"
-
-
 def _render_params_model(w: CodeWriter, operation: Operation) -> None:
-    with w.block(f"class _{operation.method.capitalize()}Params(BaseModel):"):
+    with w.block(f"class _{operation.class_prefix}Params(BaseModel):"):
+        w.docstring(f"The parameters of ``{operation.method.upper()} {operation.path}``, as validated.")
+        w.blank()
         w.line("model_config = ConfigDict(populate_by_name=True, protected_namespaces=())")
         w.blank()
         for param in operation.params:
@@ -112,109 +75,128 @@ def _render_params_model(w: CodeWriter, operation: Operation) -> None:
             render_field(w, FieldDef(param.name, param.wire, kind, param.required, None, param.description))
 
 
-def _handler_signature(operation: Operation) -> list[str]:
+def _render_operation(w: CodeWriter, route: Route, operation: Operation) -> None:
+    w.line(f"{operation.constant} = Operation(")
+    with w.block():
+        w.argument("id", operation.id)
+        w.argument("method", operation.method.upper())
+        w.argument("rule", route.flask_rule)
+        w.argument("default_status", operation.default_status)
+        w.argument("responses", {r.status: Raw(r.expr) for r in operation.responses})
+        if operation.security:
+            w.argument("security", tuple(tuple(Raw(use) for use in _scheme_uses(alt)) for alt in operation.security))
+        if operation.params:
+            w.argument("params", tuple(Raw(_param(p)) for p in operation.params))
+            w.argument("params_model", Raw(f"_{operation.class_prefix}Params"))
+        if operation.body:
+            w.argument("body", Raw(f"Body({operation.body.type.expr}, required={operation.body.required})"))
+    w.line(")")
+
+
+def _scheme_uses(alternative: dict[str, dict[str, Any]]) -> list[str]:
+    uses = []
+    for name, info in alternative.items():
+        arguments = [quote(name), quote(info.get("type", ""))]
+        for keyword, key in (("scheme", "scheme"), ("location", "in"), ("key", "name")):
+            if key in info:
+                arguments.append(f"{keyword}={quote(info[key])}")
+        if info.get("scopes"):
+            arguments.append(f"scopes={inline(tuple(info['scopes']))}")
+        uses.append(f"SchemeUse({', '.join(arguments)})")
+    return uses
+
+
+def _param(param: Param) -> str:
+    arguments = [quote(param.name), quote(param.wire), quote(param.location)]
+    if param.is_array:
+        arguments.append("multiple=True")
+    return f"Param({', '.join(arguments)})"
+
+
+def _handler_arguments(operation: Operation) -> list[str | Arg]:
     body = operation.body
-    required = [f"{p.name}: {p.plain.expr}" for p in operation.params if p.required]
-    optional = [f"{p.name}: {p.plain.with_none().expr} = None" for p in operation.params if not p.required]
+    required: list[str | Arg] = [argument(f"{p.name}: {p.plain.expr}", p.name) for p in operation.params if p.required]
+    optional: list[str | Arg] = [
+        argument(f"{p.name}: {p.plain.with_none().expr} = None", p.name) for p in operation.params if not p.required
+    ]
     if body:
         entry = f"body: {body.plain.expr}" if body.required else f"body: {body.plain.with_none().expr} = None"
         (required if body.required else optional).append(entry)
-    return ["self", "*", *required, *optional] if len(required + optional) else ["self"]
+    named = [*required, *optional]
+    return ["self", *(["*", *named] if named else []), "**injected: object"]
 
 
-def _write_signature(w: CodeWriter, name: str, arguments: list[str], returns: str) -> None:
-    header = f"def {name}({', '.join(arguments)}) -> {returns}:"
-    if w.column + len(header) <= WIDTH:
-        w.line(header)
-        return
-    w.line(f"def {name}(")
-    for argument in arguments:
-        w.line(f"    {argument},")
-    w.line(f") -> {returns}:")
+def _render_handler_type(w: CodeWriter, route: Route, operation: Operation) -> None:
+    returns = "object" if operation.return_expr == "Any" else operation.return_expr
+    label = f"{operation.method.upper()} {route.path}"
+    with w.block(f"class {operation.class_prefix}Handler(Protocol):"):
+        w.docstring(f"The signature of the handler for ``{label}``.")
+        w.blank()
+        codes = ["PLR0913"] if len(operation.params) + (1 if operation.body else 0) > MAX_ARGUMENTS else []
+        w.signature("__call__", _handler_arguments(operation), f"Reply[{returns}]", codes)
+        with w.block():
+            w.docstring(f"Handle ``{label}``.", *_handler_notes(operation))
 
 
-def _render_verb(w: CodeWriter, route: Route, operation: Operation) -> None:
-    constant = operation.method.upper()
-    has_path = any(p.location == "path" for p in operation.params)
-    arguments = ["self", "**path_values: Any"] if has_path else ["self"]
-    _write_signature(w, operation.method, arguments, "Response")
-    with w.block():
-        w.docstring(f"Handles ``{constant} {route.path}``: checks the request, calls `handle_{operation.method}`.")
-        with w.block("try:"):
-            w.line(f"self.authenticate(_{constant}_SECURITY)")
-            if operation.params:
-                path_values = "path_values" if has_path else "{}"
-                params_model = f"_{operation.method.capitalize()}Params"
-                w.line(f"params = self.read_params({params_model}, _{constant}_PARAMS, {path_values})")
-            if operation.body:
-                w.line(f"body = self.read_body({operation.body.type.expr}, required={operation.body.required})")
-            passed = [f"{p.name}=params.{p.name}" for p in operation.params]
-            if operation.body:
-                passed.append("body=body")
-            w.line(f"result = self.handle_{operation.method}({', '.join(passed)})")
-        with w.block("except ApiHTTPError as error:"):
-            w.line("return self.error_response(error)")
-        w.line(f"return self.respond(result, _{constant}_RESPONSES, {operation.default_status})")
-
-
-def _render_handler(w: CodeWriter, route: Route, operation: Operation) -> None:
-    _write_signature(w, f"handle_{operation.method}", _handler_signature(operation), operation.return_expr)
-    with w.block():
-        summary = operation.summary or f"{operation.method.upper()} {route.path}."
-        parts: list[str | tuple[str, ...]] = [summary]
-        if operation.description:
-            parts.append(operation.description)
-        parts.append(
-            f"Override this. It answers {operation.default_status} with what it returns; return `(result, status)` "
-            "for another status, or raise `ApiHTTPError` to send an error."
-        )
-        w.docstring(*parts)
-        w.line(f'raise ApiHTTPError(501, message="{operation.method.upper()} {route.path} is not implemented")')
+def _handler_notes(operation: Operation) -> list[str]:
+    notes = [text for text in (operation.summary, operation.description) if text]
+    notes.append(
+        f"Answers {operation.default_status} with what it returns; return `(result, status)` for another status, "
+        "or raise `ApiHTTPError` to send an error. Values from authentication arrive as keyword arguments."
+    )
+    return notes
 
 
 def render_blueprints_init(routes: list[Route], source: str) -> str:
     modules = sorted(route.module for route in routes)
+    ordered = [(route, op) for route in sorted(routes, key=lambda r: r.module) for op in route.operations]
+
     w = CodeWriter()
     w.line(HEADER.format(source=source))
-    w.line('"""Flask views and blueprints, one module per route."""')
+    w.line('"""Serving the API: register a handler for each operation on `Api`, then call `Api.register`."""')
     w.blank()
     w.line("from __future__ import annotations")
     w.blank()
-    w.line("from collections.abc import Callable")
-    w.blank()
-    w.line("from flask import Blueprint, Flask")
+    w.line("from typing import TYPE_CHECKING")
     w.blank()
     for line in import_lines(".", modules):
         w.line(line)
-    for line in import_lines("._base", ["ApiHTTPError", "BaseView"]):
+    for line in import_lines("._base", ["ApiHTTPError", "AuthContext", "RegistrationError", "Registry", "Reply"]):
         w.line(line)
     w.blank()
-    w.line("__all__ = [")
-    for name in ["ApiHTTPError", "BaseView", "register_all"]:
-        w.line(f'    "{name}",')
-    w.line("]")
+    w.line("if TYPE_CHECKING:")
+    with w.block():
+        w.line("from collections.abc import Callable, Sequence")
+        w.blank()
+        w.line("from ._base import Decorator")
+        for route in sorted(routes, key=lambda r: r.module):
+            handlers = [f"{op.class_prefix}Handler" for op in route.operations]
+            for line in import_lines(f".{route.module}", handlers):
+                w.line(line)
     w.blank()
-    w.line("_ROUTES: list[tuple[type[BaseView], Callable[..., Blueprint]]] = [")
-    for route in sorted(routes, key=lambda r: r.module):
-        w.line(f"    ({route.module}.{route.prefix}View, {route.module}.create_blueprint),")
-    w.line("]")
+    w.statement("__all__ = ", ["Api", "ApiHTTPError", "AuthContext", "RegistrationError", "Reply"])
     w.blank(2)
-    w.line("def register_all(app: Flask, *views: type[BaseView], url_prefix: str | None = None) -> None:")
+    with w.block("class Api(Registry):"):
+        w.docstring(
+            "The server side of the API.",
+            "Register a handler for every operation with its method here (as a decorator) and an authenticator for "
+            "every security scheme with `authenticator`; `register` then checks that nothing is missing.",
+        )
+        w.blank()
+        w.statement("OPERATIONS = ", tuple(Raw(f"{route.module}.{op.constant}") for route, op in ordered))
+        for route, operation in ordered:
+            w.blank()
+            _render_registration(w, route, operation)
+    return w.getvalue()
+
+
+def _render_registration(w: CodeWriter, route: Route, operation: Operation) -> None:
+    handler = f"{operation.class_prefix}Handler"
+    returns = f"Callable[[{handler}], {handler}]"
+    w.signature(operation.id, ["self", "*", "decorators: Sequence[Decorator] = ()"], returns)
     with w.block():
         w.docstring(
-            "Registers a blueprint for every route. Pass your subclasses of the generated views as `views`; a route "
-            "with no view, or a view that leaves a `handle_*` method unimplemented, raises."
+            f"Register the handler for ``{operation.method.upper()} {route.path}``.",
+            "Its `decorators` wrap it, the first outermost.",
         )
-        w.line("remaining = list(views)")
-        w.line("for base, create in _ROUTES:")
-        with w.block():
-            w.line("mine = [view for view in remaining if issubclass(view, base)]")
-            w.line("if len(mine) > 1:")
-            w.line('    raise ValueError(f"more than one view for {base.__name__}: {mine}")')
-            w.line("remaining = [view for view in remaining if view not in mine]")
-            w.line("if not mine:")
-            w.line('    raise ValueError(f"no view implements {base.__name__}")')
-            w.line("app.register_blueprint(create(mine[0], url_prefix=url_prefix))")
-        w.line("if remaining:")
-        w.line('    raise ValueError(f"not a subclass of any generated view: {remaining}")')
-    return w.getvalue()
+        w.line(f"return self._handles({route.module}.{operation.constant}, decorators)")

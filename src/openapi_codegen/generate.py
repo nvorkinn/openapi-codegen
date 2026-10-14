@@ -35,10 +35,15 @@ def parse_parts(only: Iterable[str] | None) -> frozenset[str]:
 
 
 def generate(
-    document: dict[str, Any], source: str = "openapi.json", only: Iterable[str] | None = None
+    document: dict[str, Any],
+    source: str = "openapi.json",
+    only: Iterable[str] | None = None,
+    package: str | None = None,
 ) -> dict[str, str]:
     """The generated package as `{relative path: source text}`. `only` limits it to the named optional parts
-    (see `parse_parts`); the models are always included."""
+    (see `parse_parts`); the models are always included. `package` is the dotted name the output is imported as:
+    with it the clients and blueprints import the models by that name, otherwise by a relative import
+    (which linters that ban parent-relative imports object to)."""
     parts = parse_parts(only)
     version = str(document.get("openapi", ""))
     if not version.startswith("3."):
@@ -48,6 +53,7 @@ def generate(
     routes = Operations(schemas).routes()
     models, aliases = schemas.finish()
     model_names = set(models) | set(aliases)
+    models_module = f"{package}.models" if package else "..models"
 
     files = {
         "__init__.py": f"{HEADER.format(source=source)}\n{_package_docstring(document)}\n",
@@ -57,12 +63,12 @@ def generate(
         files["clients/__init__.py"] = _render_clients_init(routes, source)
         files["clients/_base.py"] = (_RUNTIME / "client_base.py").read_text()
         for route in routes:
-            files[f"clients/{route.module}.py"] = render_client(route, model_names, source)
+            files[f"clients/{route.module}.py"] = render_client(route, model_names, source, models_module)
     if "blueprints" in parts:
         files["blueprints/__init__.py"] = render_blueprints_init(routes, source)
         files["blueprints/_base.py"] = (_RUNTIME / "blueprint_base.py").read_text()
         for route in routes:
-            files[f"blueprints/{route.module}.py"] = render_blueprint(route, model_names, source)
+            files[f"blueprints/{route.module}.py"] = render_blueprint(route, model_names, source, models_module)
     return files
 
 

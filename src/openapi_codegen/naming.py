@@ -23,8 +23,15 @@ BASE_MODEL_ATTRIBUTES = frozenset(
 
 # Names the generated modules import, which a generated class must not take.
 RESERVED_CLASS_NAMES = frozenset(
-    {"Annotated", "Any", "ApiError", "ApiHTTPError", "BaseClient", "BaseModel", "BaseView", "ConfigDict", "Field"}
-    | {"Literal", "ParamSpec", "UUID"}
+    {"Annotated", "Any", "Api", "ApiError", "ApiHTTPError", "AuthContext", "Authenticator", "BaseClient"}
+    | {"BaseModel", "Body", "Callable", "ClassVar", "ConfigDict", "Decorator", "Field", "Literal", "Operation"}
+    | {"Param", "Protocol", "RegistrationError", "Registry", "Reply", "SchemeUse", "Sequence", "UUID"}
+)
+
+# What the generated `Api` class already has, which an operation's method must not replace.
+RESERVED_METHOD_NAMES = frozenset(
+    {"OPERATIONS", "authenticator", "blueprint", "error_body", "error_response", "read_body", "read_params"}
+    | {"register", "respond", "verify"}
 )
 
 
@@ -61,9 +68,11 @@ def parameter_name(wire: str, taken: set[str] | frozenset[str] = frozenset()) ->
 def field_name(wire: str) -> tuple[str, bool]:
     """The model attribute for a JSON property, and whether it needs an alias back to `wire`.
 
-    A property that is already a usable identifier keeps its name, so the model mirrors the payload."""
+    A property that is already a usable snake_case identifier keeps its name, so the model mirrors the payload;
+    any other (`birthDate`) gets a snake_case attribute and an alias."""
     usable = (
         is_identifier(wire)
+        and snake(wire) == wire
         and not wire.startswith("_")
         and not wire.startswith("model_")
         and wire not in BASE_MODEL_ATTRIBUTES
@@ -76,6 +85,16 @@ def field_name(wire: str) -> tuple[str, bool]:
     if keyword.iskeyword(name) or name in BASE_MODEL_ATTRIBUTES or name.startswith("model_"):
         name += "_"
     return name, name != wire
+
+
+def method_name(text: str) -> str:
+    """A snake_case method name for an operationId, avoiding keywords, a leading digit and `Api`'s own names."""
+    name = snake(text) or "operation"
+    if name[0].isdigit():
+        name = f"op_{name}"
+    if keyword.iskeyword(name) or name in RESERVED_METHOD_NAMES:
+        name += "_"
+    return name
 
 
 def class_name(text: str) -> str:
