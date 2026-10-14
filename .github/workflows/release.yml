@@ -1,0 +1,119 @@
+name: Release
+
+# Pushing a tag v<version> (from main) builds the package and creates a GitHub release for it with the wheel, the
+# sdist and their checksums attached, so other projects can depend on a released file, whose hash their lockfile
+# records, instead of on a git tag. The release only exists once everything it ships has been built and tried.
+#
+# The package's version is stamped from the tag when it is built, so there is nothing to raise in pyproject.toml
+# first (its `version` is only a placeholder for checkouts) and no way for the two to disagree.
+#
+# Same shape as pi-dashboard's release workflow. To build a tag that was pushed before this workflow existed, or to
+# add the files to a release that is already there, run it by hand (Actions > Release > Run workflow) with the tag.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing tag to build and attach to its release, e.g. v0.1.0
+        required: true
+        type: string
+
+# Jobs that need more (the release) ask for it themselves.
+permissions:
+  contents: read
+
+env:
+  # Through the environment, never pasted into a script. For a pushed tag that is its name; by hand, the input.
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Verify tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$(git rev-parse "$TAG^{commit}")" origin/main; then
+            echo "::error::Tag $TAG does not point at a commit on main."
+            exit 1
+          fi
+
+  build:
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # Only the files that get built carry this version; nothing is committed. --frozen: no lockfile, no sync.
+      - name: Stamp version
+        run: |
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::The tag is $TAG, but release tags are v<version>, e.g. v0.2.0."; exit 1 ;;
+          esac
+          version="${TAG#v}"
+          uv version --frozen --package openapi-codegen "$version"
+      - name: Build the wheel and the sdist
+        run: |
+          pip install build
+          python -m build --outdir dist .
+          ls -l dist
+      # What gets released should work. Install the built wheel into a clean environment, away from the source
+      # tree, and generate from it.
+      - name: Try the wheel
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          /tmp/clean/bin/pip show openapi-codegen | grep '^Version'
+          cd /tmp
+          /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api
+          /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api --check
+          test -f /tmp/out/device_api/clients/_base.py
+          test -f /tmp/out/device_api/blueprints/_base.py
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum -- *.whl *.tar.gz | tee SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    # Only after the build and the try-out, so a release never exists without its files.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      # Unlike pi-dashboard's, no --clobber: a released file is never replaced, so a hash a lockfile recorded stays
+      # valid. If a file is already on the release this stops rather than swapping it.
+      - name: Create the GitHub release, or add the files to the one that exists
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY"
+          else
+            flags=()
+            # 0.2.0rc1, 0.3.0a1, 1.0.0.dev2 ...: anything that isn't plain digits and dots.
+            if ! [[ "${TAG#v}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then flags+=(--prerelease); fi
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" --generate-notes --verify-tag "${flags[@]}"
+          fi

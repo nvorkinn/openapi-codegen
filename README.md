@@ -11,12 +11,28 @@ The generator needs nothing beyond the standard library (PyYAML only to read YAM
 
 ## Install
 
+Install a released wheel. Every release has its wheel, its sdist and a `SHA256SUMS` file attached (see
+[Releases](https://github.com/nvorkinn/openapi-codegen/releases)):
+
 ```bash
-pip install "openapi-codegen @ git+https://github.com/nvorkinn/openapi-codegen"          # JSON specs
-pip install "openapi-codegen[yaml] @ git+https://github.com/nvorkinn/openapi-codegen"    # and YAML specs
+pip install https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl
 ```
 
-Pin a tag or commit in anything that builds from it (`...openapi-codegen@<tag>`).
+To read YAML specs as well, add PyYAML (`pip install pyyaml`) or install the wheel with the extra:
+`pip install "openapi-codegen[yaml] @ https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl"`.
+
+As a dependency of a uv project, point at the same file; uv records its hash in `uv.lock`, so a build fails if the
+file ever changes:
+
+```toml
+[tool.uv.sources]
+openapi-codegen = { url = "https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl" }
+
+[dependency-groups]
+dev = ["openapi-codegen"]
+```
+
+Prefer this to a git URL or tag: a tag can be moved, and a release's files are never replaced.
 
 ## Use
 
@@ -91,6 +107,26 @@ python -m pytest
 
 `tests/data/device_api.json` is a copy of [auth-broker](https://github.com/nvorkinn/auth-broker)'s
 `openapi.json`, used as a small real-world spec.
+
+## Releasing
+
+Push a tag `v<version>` from `main`, e.g. `git tag v0.2.0 && git push origin v0.2.0`. That is all: the package's version
+is stamped from the tag when it is built, so there is no version to raise first. (`version` in `pyproject.toml` is only
+a placeholder for source checkouts.)
+
+The [Release workflow](.github/workflows/release.yml), which follows pi-dashboard's, then:
+
+1. checks the tag points at a commit on `main`;
+2. builds the wheel and the sdist at that version, installs the wheel into a clean environment and generates from it;
+3. creates the GitHub release (with generated notes; a pre-release such as `v0.3.0rc1` is marked as one) with the
+   wheel, the sdist and `SHA256SUMS` attached, or, if a release for the tag already exists, adds the files to it.
+
+The release only appears once everything it ships has been built and tried. A file already on a release is never
+replaced, so a hash recorded in someone's lockfile stays valid. A tag that isn't `v<version>`, or isn't a valid
+version, stops the workflow before it builds anything.
+
+To build a tag that was pushed before the workflow existed (such as `v0.1.0`), run it by hand: Actions → Release →
+Run workflow, with the tag.
 
 ## License
 
