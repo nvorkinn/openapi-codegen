@@ -53,9 +53,6 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
       # Only the files that get built carry this version; nothing is committed. --frozen: no lockfile, no sync.
       - name: Stamp version
         run: |
@@ -67,16 +64,15 @@ jobs:
           uv version --frozen --package openapi-codegen "$version"
       - name: Build the wheel and the sdist
         run: |
-          pip install build
-          python -m build --outdir dist .
+          uv build --python 3.14 --out-dir dist .
           ls -l dist
       # What gets released should work. Install the built wheel into a clean environment, away from the source
       # tree, and generate from it.
       - name: Try the wheel
         run: |
-          python -m venv /tmp/clean
-          /tmp/clean/bin/pip install dist/*.whl
-          /tmp/clean/bin/pip show openapi-codegen | grep '^Version'
+          uv venv --python 3.14 /tmp/clean
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          uv pip show --python /tmp/clean/bin/python openapi-codegen | grep '^Version'
           cd /tmp
           /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api
           /tmp/clean/bin/openapi-codegen "$GITHUB_WORKSPACE/tests/data/device_api.json" --out /tmp/out/device_api --check
