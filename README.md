@@ -11,12 +11,28 @@ The generator needs nothing beyond the standard library (PyYAML only to read YAM
 
 ## Install
 
+Install a released wheel. Every release has its wheel, its sdist and a `SHA256SUMS` file attached (see
+[Releases](https://github.com/nvorkinn/openapi-codegen/releases)):
+
 ```bash
-pip install "openapi-codegen @ git+https://github.com/nvorkinn/openapi-codegen"          # JSON specs
-pip install "openapi-codegen[yaml] @ git+https://github.com/nvorkinn/openapi-codegen"    # and YAML specs
+pip install https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl
 ```
 
-Pin a tag or commit in anything that builds from it (`...openapi-codegen@<tag>`).
+To read YAML specs as well, add PyYAML (`pip install pyyaml`) or install the wheel with the extra:
+`pip install "openapi-codegen[yaml] @ https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl"`.
+
+As a dependency of a uv project, point at the same file; uv records its hash in `uv.lock`, so a build fails if the
+file ever changes:
+
+```toml
+[tool.uv.sources]
+openapi-codegen = { url = "https://github.com/nvorkinn/openapi-codegen/releases/download/v<version>/openapi_codegen-<version>-py3-none-any.whl" }
+
+[dependency-groups]
+dev = ["openapi-codegen"]
+```
+
+Prefer this to a git URL or tag: a tag can be moved, and a release's files are never replaced.
 
 ## Use
 
@@ -76,6 +92,16 @@ python -m pytest
 
 `tests/data/device_api.json` is a copy of [auth-broker](https://github.com/nvorkinn/auth-broker)'s
 `openapi.json`, used as a small real-world spec.
+
+## Releasing
+
+1. Raise `version` in `pyproject.toml` and merge it.
+2. On GitHub, publish a release whose tag is `v<version>`.
+
+The [Release workflow](.github/workflows/release.yml) then builds the wheel and the sdist, installs the wheel into a
+clean environment and generates from it, and attaches the wheel, the sdist and `SHA256SUMS` to the release. It stops
+before building if the tag doesn't match `version`, and it never replaces a file already on a release. To attach
+files to a release that already exists, run the workflow by hand (Actions → Release → Run workflow) with its tag.
 
 ## License
 
