@@ -27,7 +27,6 @@ openapi-codegen = "openapi_codegen.__main__:main"
 
 [tool.uv.build-backend]
 module-name = "openapi_codegen"
-module-root = ""
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
