@@ -6,12 +6,14 @@ the behaviour (authenticating, reading the request, building the response, check
 `runtime/blueprint_base.py`, which is copied next to them as `_base.py`.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .emit_models import HEADER, render_field, stdlib_import_lines, write_local_imports
-from .operations import Operation, Param, Route
 from .schema import FieldDef
 from .writer import Arg, CodeWriter, Raw, argument, import_lines, inline, quote
+
+if TYPE_CHECKING:
+    from .operations import Operation, Param, Route
 
 MAX_ARGUMENTS = 5  # ruff's PLR0913 limit (`self` and the injected `**kwargs` aren't counted)
 

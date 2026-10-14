@@ -128,7 +128,8 @@ def test_rich_models(pets_api):
 
     pet = models.NewPet(name="Tom", kind="cat")
     assert pet.weight == 1.5
-    assert pet.birth_date is None and pet.parent is None
+    assert pet.birth_date is None
+    assert pet.parent is None
     with pytest.raises(ValidationError):
         models.NewPet(name="", kind="cat")
     with pytest.raises(ValidationError):
@@ -254,13 +255,15 @@ def _cli(*args, seed):
         env={**os.environ, "PYTHONHASHSEED": str(seed)},
         capture_output=True,
         text=True,
+        check=False,
     )
 
 
 @pytest.mark.parametrize("which", ["device", "rich"])
 def test_output_does_not_depend_on_the_hash_seed(tmp_path, which):
     """Iterating a set is in a different order in every process, so anything generated from one would pass
-    --check where it was written and fail it in CI. The in-process test above can't see that."""
+    --check where it was written and fail it in CI. The in-process test above can't see that.
+    """
     spec = DEVICE_SPEC
     if which == "rich":
         spec = tmp_path / "rich.json"

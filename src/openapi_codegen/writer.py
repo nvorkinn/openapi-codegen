@@ -1,7 +1,8 @@
 """A small line-oriented emitter for Python source, plus the formatting helpers the generators share.
 
 It lays code out the way `ruff format` would (double quotes, trailing commas, 120 columns), so generated
-files need no post-processing."""
+files need no post-processing.
+"""
 
 import builtins
 import json
@@ -12,10 +13,13 @@ from typing import Any, NamedTuple
 
 WIDTH = 120
 INDENT = "    "
+MIN_CHUNKS = 2
 
 
 class Raw(str):
     """Source text to emit as it is, inside a literal."""
+
+    __slots__ = ()
 
 
 class Arg(NamedTuple):
@@ -64,7 +68,8 @@ def _flat(value: Any) -> str:
 def literal(value: Any, indent: int, column: int, trailing: int = 0) -> str:
     """`value` as source. `indent` is the column of the statement it is in and `column` where the literal
     starts on its first line; a value that doesn't fit (with `trailing` characters after it) is broken one
-    element per line."""
+    element per line.
+    """
     flat = _flat(value)
     if column + len(flat) + trailing <= WIDTH or isinstance(value, Raw | str) or not value:
         return flat
@@ -88,7 +93,7 @@ def string_expr(text: str, indent: int, column: int) -> str:
         return flat
     pad = " " * (indent + 4)
     chunks = textwrap.wrap(text, width=WIDTH - len(pad) - 3, drop_whitespace=False, break_long_words=False)
-    if len(chunks) < 2:
+    if len(chunks) < MIN_CHUNKS:
         return flat
     return "(\n" + "\n".join(f"{pad}{quote(chunk)}" for chunk in chunks) + "\n" + " " * indent + ")"
 
@@ -102,7 +107,8 @@ def split_summary(text: str, fallback: str) -> tuple[str, str]:
 
     The summary is the first sentence when that fits on a line and reads as a summary (it ends with a period and
     doesn't start with "This"); otherwise it is `fallback` and all of `text` follows. Pydocstyle wants the summary
-    alone on the first line, in the imperative for a function, so spec text can't always be one."""
+    alone on the first line, in the imperative for a function, so spec text can't always be one.
+    """
     words = " ".join(text.split())
     match = _SENTENCE.match(words)
     if match is None and words and words[-1] not in ".!?":
@@ -119,7 +125,8 @@ def split_summary(text: str, fallback: str) -> tuple[str, str]:
 
 def docstring_lines(parts: Sequence[str | tuple[str, ...]], indent: int) -> list[str]:
     """A docstring from `parts`: each string is a paragraph, re-wrapped to fit; each tuple is lines to keep
-    as they are (an `Args:` list, say). The first part is the summary and should be a single line."""
+    as they are (an `Args:` list, say). The first part is the summary and should be a single line.
+    """
     raw = any("\\" in part for item in parts for part in ((item,) if isinstance(item, str) else item))
     width = WIDTH - indent - 6
     blocks: list[list[str]] = []
@@ -193,7 +200,8 @@ class CodeWriter:
 
     def signature(self, name: str, arguments: Sequence[str | Arg], returns: str, noqa: Sequence[str] = ()) -> None:
         """A `def` line: on one line when it fits, else one argument per line. Trailing `# noqa` comments go on
-        the line each rule is reported on: `noqa` for the function, `Arg.noqa` for an argument."""
+        the line each rule is reported on: `noqa` for the function, `Arg.noqa` for an argument.
+        """
         args = [item if isinstance(item, Arg) else Arg(item) for item in arguments]
         header = f"def {name}({', '.join(a.text for a in args)}) -> {returns}:"
         if self.column + len(header) <= WIDTH:

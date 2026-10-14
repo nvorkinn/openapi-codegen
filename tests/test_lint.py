@@ -2,7 +2,8 @@
 
 ALL has rules that contradict each other or need a policy rather than code, so the config below turns off exactly
 those: D203 and D213 (opposites of D211 and D212), COM812 and ISC001 (clash with the formatter) and CPY001
-(wants a copyright notice). Pydantic models need their imports at run time, which TC rules are told about."""
+(wants a copyright notice). Pydantic models need their imports at run time, which TC rules are told about.
+"""
 
 import json
 import subprocess

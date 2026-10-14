@@ -10,6 +10,8 @@ from .schema import Schemas, SpecError, TypeRef, warn
 METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 LOCATIONS = ("path", "query", "header", "cookie")
 RESERVED_PARAMETER_NAMES = frozenset({"self", "body"})
+HTTP_OK = 200
+HTTP_REDIRECT = 300
 _PATH_VARIABLE = re.compile(r"\{([^}]+)\}")
 
 
@@ -46,7 +48,7 @@ class ResponseDef:
 
     @property
     def is_success(self) -> bool:
-        return self.status == "2XX" or (isinstance(self.status, int) and 200 <= self.status < 300)
+        return self.status == "2XX" or (isinstance(self.status, int) and HTTP_OK <= self.status < HTTP_REDIRECT)
 
 
 @dataclass
@@ -106,7 +108,8 @@ class Operation:
 
     def type_imports(self, server: bool) -> set[str]:
         """The typing/stdlib/pydantic symbols the types in this operation need: with their constraints on a
-        server (which validates), without in a client's signature."""
+        server (which validates), without in a client's signature.
+        """
         found: set[str] = set()
         for param in self.params:
             found |= (param.type if server else param.plain).imports
@@ -158,7 +161,7 @@ def _flask_converter(param: Param | None) -> str:
 
 
 def _is_json(media_type: str) -> bool:
-    base = media_type.split(";")[0].strip().lower()
+    base = media_type.split(";", maxsplit=1)[0].strip().lower()
     return base == "application/json" or base.endswith("+json")
 
 
@@ -170,8 +173,8 @@ class Operations:
     def routes(self) -> list[Route]:
         routes: list[Route] = []
         names = Names()
-        for path, item in self.document.get("paths", {}).items():
-            item = self.schemas.resolve(item)
+        for path, raw_item in self.document.get("paths", {}).items():
+            item = self.schemas.resolve(raw_item)
             stem = _path_stem(path)
             module = names.reserve(snake(stem) or "root")
             prefix = pascal(module)
@@ -212,7 +215,7 @@ class Operations:
         hint = f"{route.prefix}{method.capitalize()}"
         if node.get("operationId"):
             hint = pascal(node["operationId"])
-        params = self._params(route, hint, [*shared, *node.get("parameters", [])])
+        params = self._params(hint, [*shared, *node.get("parameters", [])])
         return Operation(
             method=method,
             path=route.path,
@@ -226,11 +229,11 @@ class Operations:
             operation_id=str(node.get("operationId") or ""),
         )
 
-    def _params(self, route: Route, hint: str, raw: list[Any]) -> list[Param]:
+    def _params(self, hint: str, raw: list[Any]) -> list[Param]:
         # An operation's own parameter replaces a path-level one with the same name and location.
         merged: dict[tuple[str, str], dict[str, Any]] = {}
-        for entry in raw:
-            entry = self.schemas.resolve(entry)
+        for raw_entry in raw:
+            entry = self.schemas.resolve(raw_entry)
             location = entry.get("in")
             if location not in LOCATIONS:
                 raise SpecError(f"parameter {entry.get('name')!r} has unknown location {location!r}")
@@ -280,8 +283,8 @@ class Operations:
 
     def _responses(self, hint: str, raw: dict[str, Any]) -> list[ResponseDef]:
         found: list[ResponseDef] = []
-        for key, node in raw.items():
-            node = self.schemas.resolve(node)
+        for key, raw_node in raw.items():
+            node = self.schemas.resolve(raw_node)
             status: int | str = int(key) if key.isdigit() else key.upper() if key.upper().endswith("XX") else "default"
             content = node.get("content", {})
             media = next((m for m in content if _is_json(m)), None)

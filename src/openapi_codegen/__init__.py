@@ -2,7 +2,8 @@
 
     python -m openapi_codegen openapi.json --out generated/device_api
 
-See README.md."""
+See README.md.
+"""
 
 from .generate import generate, stale_files, write_files
 from .schema import SpecError
