@@ -18,7 +18,7 @@ dependencies = []
 # Reading a .yaml/.yml spec. JSON needs nothing.
 yaml = ["pyyaml"]
 # What the tests need: PyYAML, and the libraries the generated code imports.
-test = ["pytest", "pyyaml", "pydantic", "requests", "flask", "ruff==0.16.10"]
+test = ["pytest", "pyyaml", "pydantic", "requests", "flask", "ruff==0.17.0"]
 
 [project.scripts]
 openapi-codegen = "openapi_codegen.__main__:main"
@@ -32,3 +32,6 @@ openapi_codegen = ["runtime/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[lint]
+select = ["ALL"]
