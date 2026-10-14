@@ -65,8 +65,8 @@ def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
     w.blank(2)
     with w.block(f"class {route.prefix}View(BaseView):"):
         w.docstring(
-            f"Serves ``{route.path}``. Subclass it, implement the `handle_*` methods you need and pass the "
-            "subclass to `create_blueprint`; a verb left unimplemented answers 501."
+            f"Serves ``{route.path}``. Subclass it, implement every `handle_*` method and pass the "
+            "subclass to `create_blueprint`, which raises if one is left unimplemented."
         )
         for operation in route.operations:
             w.blank()
@@ -84,6 +84,10 @@ def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
     w.line(") -> Blueprint:")
     with w.block():
         w.docstring(f"The blueprint for ``{route.path}``, served by `view` (``{view}`` or a subclass of it).")
+        handlers = tuple(f"handle_{op.method}" for op in route.operations)
+        w.line(f"missing = [n for n in {handlers!r} if getattr(view, n) is getattr({view}, n)]")
+        w.line("if missing:")
+        w.line("    raise NotImplementedError(f\"{view.__name__} does not implement {', '.join(missing)}\")")
         w.line(f"blueprint = Blueprint(name or {quote(route.module)}, __name__, url_prefix=url_prefix)")
         w.line(f"blueprint.add_url_rule({quote(route.flask_rule)}, view_func=view.as_view({quote(route.module)}))")
         w.line("return blueprint")
@@ -199,7 +203,7 @@ def render_blueprints_init(routes: list[Route], source: str) -> str:
     with w.block():
         w.docstring(
             "Registers a blueprint for every route. Pass your subclasses of the generated views as `views`; a route "
-            "with none is served by its generated view, which answers 501."
+            "with no view, or a view that leaves a `handle_*` method unimplemented, raises."
         )
         w.line("remaining = list(views)")
         w.line("for base, create in _ROUTES:")
@@ -208,7 +212,9 @@ def render_blueprints_init(routes: list[Route], source: str) -> str:
             w.line("if len(mine) > 1:")
             w.line('    raise ValueError(f"more than one view for {base.__name__}: {mine}")')
             w.line("remaining = [view for view in remaining if view not in mine]")
-            w.line("app.register_blueprint(create(mine[0] if mine else base, url_prefix=url_prefix))")
+            w.line("if not mine:")
+            w.line('    raise ValueError(f"no view implements {base.__name__}")')
+            w.line("app.register_blueprint(create(mine[0], url_prefix=url_prefix))")
         w.line("if remaining:")
         w.line('    raise ValueError(f"not a subclass of any generated view: {remaining}")')
     return w.getvalue()

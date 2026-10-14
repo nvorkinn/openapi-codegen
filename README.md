@@ -73,7 +73,8 @@ unquoted `200:` key is the status code `"200"`, and a repeated key is an error n
   the `requests.Session` if given, else `requests.request`; an error status raises `ApiError`.
 - `blueprints/<route>.py`: one Flask `MethodView` per route plus `create_blueprint()`. Subclass the view and
   override `handle_<verb>()` (and `authenticate()`, which refuses every route that declares security until you
-  do); anything left alone answers 501. `blueprints.register_all(app, *your_views)` wires them up.
+  do). Every route and verb in the API must be implemented: `create_blueprint` raises `NotImplementedError` if a
+  `handle_<verb>()` is not overridden, and `blueprints.register_all(app, *your_views)` raises if a route has no view.
 
 ```python
 from some.package.blueprints.api_config import ApiConfigView, create_blueprint
