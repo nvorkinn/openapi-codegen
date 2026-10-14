@@ -214,15 +214,19 @@ def test_client_and_blueprint_round_trip(device_api):
     assert caught.value.body == models.Error(error="Missing or unknown secret.")
 
 
-def test_default_view_is_not_implemented_and_fails_closed(device_api):
-    from device_api.blueprints import register_all
-    from device_api.clients import ApiConfigClient, ApiError
+def test_unimplemented_routes_are_refused(device_api):
+    from device_api.blueprints import api_config, register_all
 
-    app = Flask(__name__)
-    register_all(app)
-    with pytest.raises(ApiError) as caught:
-        ApiConfigClient("http://broker", FlaskSession(app), auth_token="secret").get()
-    assert caught.value.status_code == 501
+    with pytest.raises(ValueError):
+        register_all(Flask(__name__))
+
+    class Partial(api_config.ApiConfigView):
+        pass
+
+    with pytest.raises(NotImplementedError, match="handle_get"):
+        api_config.create_blueprint(Partial)
+    with pytest.raises(NotImplementedError):
+        register_all(Flask(__name__), Partial)
 
 
 def test_register_all_matches_subclasses(device_api):
@@ -230,6 +234,9 @@ def test_register_all_matches_subclasses(device_api):
 
     class View(api_config.ApiConfigView):
         def authenticate(self, security):
+            return None
+
+        def handle_get(self, *, x_device_name=None):
             return None
 
     app = Flask(__name__)
