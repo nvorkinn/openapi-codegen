@@ -29,6 +29,21 @@ openapi-codegen openapi.json --out some/package --check
 step can fail when the spec and the generated code drift. The output is deterministic: the same spec gives the
 same bytes in every process.
 
+By default all three parts are generated. `--only` leaves some out, so a package that only calls an API doesn't
+carry Flask views it can't import, and a server doesn't carry clients:
+
+```bash
+openapi-codegen openapi.json --out some/package --only clients       # models + clients; no Flask needed
+openapi-codegen openapi.json --out some/package --only blueprints    # models + Flask blueprints
+openapi-codegen openapi.json --out some/package --only clients,blueprints   # the same as the default
+openapi-codegen openapi.json --out some/package --only models        # the models alone
+```
+
+The Pydantic models are always generated, because the clients and the blueprints are built on them. Values can be
+comma separated or repeated (`--only clients --only blueprints`). If you narrow an existing `--out`, the generated
+files of the part you dropped are removed, along with the directory if that leaves it empty (a file you wrote
+there yourself is never touched), and `--check` reports them as out of date until you do.
+
 A file named `.yaml` or `.yml` is read as YAML, anything else as JSON. YAML is read the way JSON would mean it:
 only `true`/`false` are booleans (so an enum of `on`, `off`, `yes`, `no` stays strings), dates stay strings, an
 unquoted `200:` key is the status code `"200"`, and a repeated key is an error naming its line.
