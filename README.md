@@ -101,9 +101,9 @@ Only local `$ref`s and JSON bodies are supported.
 ## Development
 
 ```bash
-pip install -e ".[test]"
-ruff check . && ruff format --check .
-python -m pytest
+uv sync
+uv run ruff check . && uv run ruff format --check .
+uv run pytest
 ```
 
 `tests/data/device_api.json` is a copy of [auth-broker](https://github.com/nvorkinn/auth-broker)'s
