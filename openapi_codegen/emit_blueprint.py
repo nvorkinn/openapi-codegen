@@ -87,7 +87,7 @@ def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
         handlers = tuple(f"handle_{op.method}" for op in route.operations)
         w.line(f"missing = [n for n in {handlers!r} if getattr(view, n) is getattr({view}, n)]")
         w.line("if missing:")
-        w.line(f'    raise NotImplementedError(f"{{view.__name__}} does not implement {{\', \'.join(missing)}}")')
+        w.line("    raise NotImplementedError(f\"{view.__name__} does not implement {', '.join(missing)}\")")
         w.line(f"blueprint = Blueprint(name or {quote(route.module)}, __name__, url_prefix=url_prefix)")
         w.line(f"blueprint.add_url_rule({quote(route.flask_rule)}, view_func=view.as_view({quote(route.module)}))")
         w.line("return blueprint")
