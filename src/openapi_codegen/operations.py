@@ -94,7 +94,8 @@ class Operation:
 
     def type_imports(self, server: bool) -> set[str]:
         """The typing/stdlib/pydantic symbols the types in this operation need: with their constraints on a
-        server (which validates), without in a client's signature."""
+        server (which validates), without in a client's signature.
+        """
         found: set[str] = set()
         for param in self.params:
             found |= (param.type if server else param.plain).imports
@@ -118,7 +119,8 @@ class Route:
     def flask_rule(self) -> str:
         def convert(match: re.Match[str]) -> str:
             param = next(
-                (p for p in self.operations[0].params if p.location == "path" and p.wire == match.group(1)), None
+                (p for p in self.operations[0].params if p.location == "path" and p.wire == match.group(1)),
+                None,
             )
             converter = _flask_converter(param)
             return f"<{converter}{param.name if param else parameter_name(match.group(1))}>"
@@ -129,7 +131,8 @@ class Route:
     def client_path(self) -> str:
         def convert(match: re.Match[str]) -> str:
             param = next(
-                (p for p in self.operations[0].params if p.location == "path" and p.wire == match.group(1)), None
+                (p for p in self.operations[0].params if p.location == "path" and p.wire == match.group(1)),
+                None,
             )
             return "{" + (param.name if param else parameter_name(match.group(1))) + "}"
 
@@ -146,7 +149,7 @@ def _flask_converter(param: Param | None) -> str:
 
 
 def _is_json(media_type: str) -> bool:
-    base = media_type.split(";")[0].strip().lower()
+    base = media_type.split(";", maxsplit=1)[0].strip().lower()
     return base == "application/json" or base.endswith("+json")
 
 
@@ -199,7 +202,8 @@ class Operations:
             entry = self.schemas.resolve(entry)
             location = entry.get("in")
             if location not in LOCATIONS:
-                raise SpecError(f"parameter {entry.get('name')!r} has unknown location {location!r}")
+                msg = f"parameter {entry.get('name')!r} has unknown location {location!r}"
+                raise SpecError(msg)
             merged[(entry["name"], location)] = entry
 
         params: list[Param] = []
@@ -222,7 +226,7 @@ class Operations:
                     type=self.schemas.type_of(schema, sub_hint),
                     plain=self.schemas.type_of(schema, sub_hint, constraints=False),
                     description=entry.get("description", ""),
-                )
+                ),
             )
         return params
 
@@ -270,7 +274,8 @@ class Operations:
             alternative: dict[str, dict[str, Any]] = {}
             for name, scopes in requirement.items():
                 if name not in schemes:
-                    raise SpecError(f"security requirement names an undefined scheme {name!r}")
+                    msg = f"security requirement names an undefined scheme {name!r}"
+                    raise SpecError(msg)
                 scheme = self.schemas.resolve(schemes[name])
                 info: dict[str, Any] = {"type": scheme.get("type", "")}
                 for key in ("scheme", "in", "name"):
@@ -286,14 +291,18 @@ class Operations:
         for operation in route.operations:
             documented = {p.wire for p in operation.params if p.location == "path"}
             if declared != documented:
-                raise SpecError(
+                msg = (
                     f"{operation.method.upper()} {route.path}: path parameters {sorted(documented)} "
                     f"don't match the {sorted(declared)} in the path"
+                )
+                raise SpecError(
+                    msg,
                 )
         # Every operation on a route shares one URL rule, so they must agree on the names Flask will see.
         names = {frozenset((p.wire, p.name) for p in op.params if p.location == "path") for op in route.operations}
         if len(names) > 1:
-            raise SpecError(f"{route.path}: operations name their path parameters differently")
+            msg = f"{route.path}: operations name their path parameters differently"
+            raise SpecError(msg)
 
 
 def _path_stem(path: str) -> str:

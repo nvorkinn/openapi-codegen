@@ -27,7 +27,7 @@ def _generate(out: Path, *only: str) -> int:
     return main([str(DEVICE_SPEC), "--out", str(out), *only])
 
 
-def test_by_default_all_three_are_generated(tmp_path):
+def test_by_default_all_three_are_generated(tmp_path) -> None:
     assert _generate(tmp_path / "gen") == 0
     assert _files(tmp_path / "gen") == MODELS | CLIENTS | BLUEPRINTS
 
@@ -44,12 +44,12 @@ def test_by_default_all_three_are_generated(tmp_path):
         (["--only", "models,clients"], MODELS | CLIENTS),
     ],
 )
-def test_only_picks_the_parts_and_the_models_are_always_there(tmp_path, only, expected):
+def test_only_picks_the_parts_and_the_models_are_always_there(tmp_path, only, expected) -> None:
     assert _generate(tmp_path / "gen", *only) == 0
     assert _files(tmp_path / "gen") == expected
 
 
-def test_naming_every_part_is_the_same_as_the_default(tmp_path):
+def test_naming_every_part_is_the_same_as_the_default(tmp_path) -> None:
     assert _generate(tmp_path / "default") == 0
     assert _generate(tmp_path / "named", "--only", "blueprints,clients") == 0
     for relative in _files(tmp_path / "default"):
@@ -57,7 +57,7 @@ def test_naming_every_part_is_the_same_as_the_default(tmp_path):
 
 
 @pytest.mark.parametrize("value", ["client", "flask", "", "clients,", "clients,,blueprints"])
-def test_an_unknown_or_empty_part_is_a_usage_error_and_writes_nothing(tmp_path, capsys, value):
+def test_an_unknown_or_empty_part_is_a_usage_error_and_writes_nothing(tmp_path, capsys, value) -> None:
     with pytest.raises(SystemExit) as exit_:
         _generate(tmp_path / "gen", "--only", value)
 
@@ -78,7 +78,7 @@ def _import_with_missing(parent: Path, module: str, *missing: str) -> subprocess
     )
 
 
-def test_each_part_imports_without_the_libraries_only_the_others_need(tmp_path):
+def test_each_part_imports_without_the_libraries_only_the_others_need(tmp_path) -> None:
     """The point of the flag: a client doesn't need Flask, a server doesn't need requests."""
     both = tmp_path / "both" / "device_api"
     clients = tmp_path / "clients" / "device_api"
@@ -100,7 +100,7 @@ def test_each_part_imports_without_the_libraries_only_the_others_need(tmp_path):
     assert _import_with_missing(models.parent, "device_api.models", "flask", "requests").returncode == 0
 
 
-def test_narrowing_removes_the_generated_files_of_the_part_that_is_left_out(tmp_path, capsys):
+def test_narrowing_removes_the_generated_files_of_the_part_that_is_left_out(tmp_path, capsys) -> None:
     out = tmp_path / "gen"
     assert _generate(out) == 0
     capsys.readouterr()
@@ -113,7 +113,7 @@ def test_narrowing_removes_the_generated_files_of_the_part_that_is_left_out(tmp_
     assert _generate(out, "--only", "clients", "--check") == 0
 
 
-def test_narrowing_leaves_alone_a_file_in_that_directory_it_did_not_write(tmp_path):
+def test_narrowing_leaves_alone_a_file_in_that_directory_it_did_not_write(tmp_path) -> None:
     out = tmp_path / "gen"
     assert _generate(out) == 0
     (out / "blueprints" / "mine.py").write_text("# hand written\n")
@@ -124,7 +124,7 @@ def test_narrowing_leaves_alone_a_file_in_that_directory_it_did_not_write(tmp_pa
     assert _files(out) == MODELS | CLIENTS | {"blueprints/mine.py"}
 
 
-def test_check_with_a_narrower_set_reports_the_parts_left_over(tmp_path, capsys):
+def test_check_with_a_narrower_set_reports_the_parts_left_over(tmp_path, capsys) -> None:
     out = tmp_path / "gen"
     assert _generate(out) == 0
     capsys.readouterr()
@@ -137,14 +137,14 @@ def test_check_with_a_narrower_set_reports_the_parts_left_over(tmp_path, capsys)
     assert _files(out) == MODELS | CLIENTS | BLUEPRINTS  # --check wrote and removed nothing
 
 
-def test_widening_adds_the_part_back(tmp_path):
+def test_widening_adds_the_part_back(tmp_path) -> None:
     out = tmp_path / "gen"
     assert _generate(out, "--only", "clients") == 0
     assert _generate(out) == 0
     assert _files(out) == MODELS | CLIENTS | BLUEPRINTS
 
 
-def test_the_python_api_takes_the_same_selection():
+def test_the_python_api_takes_the_same_selection() -> None:
     document = json.loads(DEVICE_SPEC.read_text())
 
     assert set(generate(document)) == MODELS | CLIENTS | BLUEPRINTS
@@ -156,7 +156,7 @@ def test_the_python_api_takes_the_same_selection():
         parse_parts(["servers"])
 
 
-def test_a_narrower_set_is_still_independent_of_the_hash_seed(tmp_path):
+def test_a_narrower_set_is_still_independent_of_the_hash_seed(tmp_path) -> None:
     out = tmp_path / "gen"
     cli = [sys.executable, "-m", "openapi_codegen", str(DEVICE_SPEC), "--out", str(out), "--only", "clients"]
 
@@ -164,6 +164,10 @@ def test_a_narrower_set_is_still_independent_of_the_hash_seed(tmp_path):
     assert written.returncode == 0, written.stderr
     for seed in (2, 3, 4):
         checked = subprocess.run(
-            [*cli, "--check"], cwd=ROOT, env={**os.environ, "PYTHONHASHSEED": str(seed)}, capture_output=True, text=True
+            [*cli, "--check"],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
+            capture_output=True,
+            text=True,
         )
         assert checked.returncode == 0, f"seed {seed}:\n{checked.stderr}"

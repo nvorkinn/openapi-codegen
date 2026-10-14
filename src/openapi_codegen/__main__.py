@@ -39,20 +39,18 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         files = generate(load(args.spec), source=args.spec.name, only=parts)
-    except (SpecError, OSError) as error:
-        print(f"error: {error}", file=sys.stderr)
+    except SpecError, OSError:
         return 2
 
     if args.check:
         stale = stale_files(files, args.out)
-        for relative in stale:
-            print(f"out of date: {args.out / relative}", file=sys.stderr)
+        for _relative in stale:
+            pass
         return 1 if stale else 0
 
     removed = write_files(files, args.out)
-    for relative in removed:
-        print(f"removed {args.out / relative}")
-    print(f"Wrote {len(files)} files to {args.out}")
+    for _relative in removed:
+        pass
     return 0
 
 

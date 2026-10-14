@@ -2,12 +2,17 @@
 
 The view has one method per HTTP verb that does the plumbing (authenticate, read and validate the request,
 build the response) and calls an overridable `handle_<verb>` method with the validated values. A server
-subclasses the view and implements the handlers; the generated file is never edited."""
+subclasses the view and implements the handlers; the generated file is never edited.
+"""
+
+from typing import TYPE_CHECKING
 
 from .emit_models import HEADER, render_field, stdlib_import_lines
-from .operations import Operation, Param, Route
 from .schema import FieldDef
 from .writer import WIDTH, CodeWriter, Raw, import_lines, quote
+
+if TYPE_CHECKING:
+    from .operations import Operation, Param, Route
 
 
 def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
@@ -66,7 +71,7 @@ def render_blueprint(route: Route, model_names: set[str], source: str) -> str:
     with w.block(f"class {route.prefix}View(BaseView):"):
         w.docstring(
             f"Serves ``{route.path}``. Subclass it, implement every `handle_*` method and pass the "
-            "subclass to `create_blueprint`, which raises if one is left unimplemented."
+            "subclass to `create_blueprint`, which raises if one is left unimplemented.",
         )
         for operation in route.operations:
             w.blank()
@@ -166,7 +171,7 @@ def _render_handler(w: CodeWriter, route: Route, operation: Operation) -> None:
             parts.append(operation.description)
         parts.append(
             f"Override this. It answers {operation.default_status} with what it returns; return `(result, status)` "
-            "for another status, or raise `ApiHTTPError` to send an error."
+            "for another status, or raise `ApiHTTPError` to send an error.",
         )
         w.docstring(*parts)
         w.line(f'raise ApiHTTPError(501, message="{operation.method.upper()} {route.path} is not implemented")')
@@ -203,7 +208,7 @@ def render_blueprints_init(routes: list[Route], source: str) -> str:
     with w.block():
         w.docstring(
             "Registers a blueprint for every route. Pass your subclasses of the generated views as `views`; a route "
-            "with no view, or a view that leaves a `handle_*` method unimplemented, raises."
+            "with no view, or a view that leaves a `handle_*` method unimplemented, raises.",
         )
         w.line("remaining = list(views)")
         w.line("for base, create in _ROUTES:")

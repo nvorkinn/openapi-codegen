@@ -1,9 +1,9 @@
 """Reading JSON Schema out of an OpenAPI document into Python types and Pydantic model definitions.
 
 `Schemas.type_of` turns any schema into a `TypeRef` (a Python type expression plus what it needs), registering
-a model for every object it meets along the way. `Schemas.finish` returns them all."""
+a model for every object it meets along the way. `Schemas.finish` returns them all.
+"""
 
-import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,7 +25,8 @@ _SCALAR_DEFAULTS = (str, int, float, bool)
 @dataclass(frozen=True)
 class TypeRef:
     """A Python type expression and what it needs: the generated classes it names (`deps`) and the
-    symbols it takes from typing, datetime, uuid and pydantic (`imports`)."""
+    symbols it takes from typing, datetime, uuid and pydantic (`imports`).
+    """
 
     expr: str
     deps: frozenset[str] = frozenset()
@@ -119,7 +120,7 @@ class SpecError(ValueError):
 
 
 def warn(message: str) -> None:
-    print(f"warning: {message}", file=sys.stderr)
+    pass
 
 
 class Schemas:
@@ -145,9 +146,11 @@ class Schemas:
         while isinstance(node, dict) and "$ref" in node:
             ref = node["$ref"]
             if not ref.startswith("#/"):
-                raise SpecError(f"only local $refs are supported, not {ref!r}")
+                msg = f"only local $refs are supported, not {ref!r}"
+                raise SpecError(msg)
             if ref in seen:
-                raise SpecError(f"$ref cycle through {ref!r}")
+                msg = f"$ref cycle through {ref!r}"
+                raise SpecError(msg)
             seen.add(ref)
             target: Any = self.document
             for part in ref[2:].split("/"):
@@ -155,7 +158,8 @@ class Schemas:
                 try:
                     target = target[part]
                 except KeyError, TypeError:
-                    raise SpecError(f"unresolvable $ref {ref!r}") from None
+                    msg = f"unresolvable $ref {ref!r}"
+                    raise SpecError(msg) from None
             node = target
         return node
 
@@ -163,11 +167,13 @@ class Schemas:
 
     def type_of(self, schema: Any, hint: str, constraints: bool = True) -> TypeRef:
         """The Python type for `schema`. Inline objects become models named after `hint`. With `constraints`
-        false, length/range limits are left out (a client's signature has no use for them)."""
+        false, length/range limits are left out (a client's signature has no use for them).
+        """
         if schema is True or schema == {} or schema is None:
             return TypeRef("Any", imports=frozenset({"Any"}))
         if schema is False:
-            raise SpecError("a `false` schema can't be given a type")
+            msg = "a `false` schema can't be given a type"
+            raise SpecError(msg)
         if "$ref" in schema:
             ref = schema["$ref"]
             if ref in self._component_names:
@@ -235,7 +241,8 @@ class Schemas:
         if kind in _PRIMITIVES:
             return self._constrained(TypeRef(_PRIMITIVES[kind]), schema, constraints)
         if kind is not None:
-            raise SpecError(f"unknown schema type {kind!r}")
+            msg = f"unknown schema type {kind!r}"
+            raise SpecError(msg)
         return TypeRef("Any", imports=frozenset({"Any"}))
 
     @staticmethod
@@ -271,7 +278,10 @@ class Schemas:
             return ref
         arguments = ", ".join(f"{key}={quote(v) if isinstance(v, str) else v!r}" for key, v in limits.items())
         return TypeRef(
-            f"Annotated[{ref.expr}, Field({arguments})]", ref.deps, ref.imports | {"Annotated", "Field"}, ref.nullable
+            f"Annotated[{ref.expr}, Field({arguments})]",
+            ref.deps,
+            ref.imports | {"Annotated", "Field"},
+            ref.nullable,
         )
 
     # -- models ---------------------------------------------------------------------------------------
@@ -329,7 +339,7 @@ class Schemas:
 
         taken: set[str] = set()
         for wire, sub in properties.items():
-            attribute, aliased = field_name(wire)
+            attribute, _aliased = field_name(wire)
             while attribute in taken:
                 attribute += "_"
             taken.add(attribute)

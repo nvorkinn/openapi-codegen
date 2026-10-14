@@ -18,13 +18,13 @@ BASE_MODEL_ATTRIBUTES = frozenset(
         "schema_json",
         "update_forward_refs",
         "validate",
-    }
+    },
 )
 
 # Names the generated modules import, which a generated class must not take.
 RESERVED_CLASS_NAMES = frozenset(
     {"Annotated", "Any", "ApiError", "ApiHTTPError", "BaseClient", "BaseModel", "BaseView", "ConfigDict", "Field"}
-    | {"Literal", "ParamSpec", "UUID"}
+    | {"Literal", "ParamSpec", "UUID"},
 )
 
 
@@ -36,8 +36,7 @@ def snake(text: str) -> str:
     """`X-Device-Name` -> `x_device_name`, `pageSize` -> `page_size`, `HTTPHeader` -> `http_header`."""
     text = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", text)
     text = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
-    text = re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_").lower()
-    return text
+    return re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_").lower()
 
 
 def pascal(text: str) -> str:
@@ -61,7 +60,8 @@ def parameter_name(wire: str, taken: set[str] | frozenset[str] = frozenset()) ->
 def field_name(wire: str) -> tuple[str, bool]:
     """The model attribute for a JSON property, and whether it needs an alias back to `wire`.
 
-    A property that is already a usable identifier keeps its name, so the model mirrors the payload."""
+    A property that is already a usable identifier keeps its name, so the model mirrors the payload.
+    """
     usable = (
         is_identifier(wire)
         and not wire.startswith("_")

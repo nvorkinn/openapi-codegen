@@ -1,7 +1,8 @@
 """A small line-oriented emitter for Python source, plus the formatting helpers the generators share.
 
 It lays code out the way `ruff format` would (double quotes, trailing commas, 120 columns), so generated
-files need no post-processing."""
+files need no post-processing.
+"""
 
 import json
 import textwrap
@@ -34,12 +35,14 @@ def _flat(value: Any) -> str:
         return f"({inner},)" if len(value) == 1 else f"({inner})"
     if isinstance(value, Sequence):
         return "[" + ", ".join(_flat(v) for v in value) + "]"
-    raise TypeError(f"can't write {value!r} as a literal")
+    msg = f"can't write {value!r} as a literal"
+    raise TypeError(msg)
 
 
 def literal(value: Any, indent: int, column: int) -> str:
     """`value` as source. `indent` is the column of the statement it is in and `column` where the literal
-    starts on its first line; a value that doesn't fit is broken one element per line."""
+    starts on its first line; a value that doesn't fit is broken one element per line.
+    """
     flat = _flat(value)
     if column + len(flat) <= WIDTH or isinstance(value, Raw | str) or not value:
         return flat
@@ -70,7 +73,8 @@ def string_expr(text: str, indent: int, column: int) -> str:
 
 def docstring_lines(parts: Sequence[str | tuple[str, ...]], indent: int) -> list[str]:
     """A docstring from `parts`: each string is a paragraph, re-wrapped to fit; each tuple is lines to keep
-    as they are (an `Args:` list, say)."""
+    as they are (an `Args:` list, say).
+    """
     width = WIDTH - indent - 6
     blocks: list[list[str]] = []
     for part in parts:

@@ -40,7 +40,7 @@ RICH_SPEC = {
                     "200": {
                         "description": "OK",
                         "content": _json({"type": "array", "items": {"$ref": "#/components/schemas/Pet"}}),
-                    }
+                    },
                 },
             },
             "post": {
@@ -101,7 +101,7 @@ RICH_SPEC = {
                     },
                 ],
             },
-        }
+        },
     },
 }
 
@@ -109,7 +109,7 @@ RICH_SPEC = {
 class FlaskSession(requests.Session):
     """A requests session whose calls are answered by a Flask test client."""
 
-    def __init__(self, app):
+    def __init__(self, app) -> None:
         super().__init__()
         self.client = app.test_client()
         self.calls = []
@@ -164,7 +164,7 @@ def _config(models, **overrides):
     return models.ConfigResponse(**{**values, **overrides})
 
 
-def test_models_required_and_nullable(device_api):
+def test_models_required_and_nullable(device_api) -> None:
     from device_api import models
 
     config = _config(models)
@@ -181,7 +181,7 @@ def test_models_required_and_nullable(device_api):
     assert models.Error(error="x").error == "x"
 
 
-def test_client_and_blueprint_round_trip(device_api):
+def test_client_and_blueprint_round_trip(device_api) -> None:
     from device_api import models
     from device_api.blueprints import api_config as blueprint
     from device_api.clients import ApiConfigClient, ApiError
@@ -189,7 +189,7 @@ def test_client_and_blueprint_round_trip(device_api):
     seen = {}
 
     class View(blueprint.ApiConfigView):
-        def authenticate(self, security):
+        def authenticate(self, security) -> None:
             if self.bearer_token() != "secret":
                 raise blueprint.ApiHTTPError(401, message="Missing or unknown secret.")
 
@@ -214,7 +214,7 @@ def test_client_and_blueprint_round_trip(device_api):
     assert caught.value.body == models.Error(error="Missing or unknown secret.")
 
 
-def test_unimplemented_routes_are_refused(device_api):
+def test_unimplemented_routes_are_refused(device_api) -> None:
     from device_api.blueprints import api_config, register_all
 
     with pytest.raises(ValueError):
@@ -229,14 +229,14 @@ def test_unimplemented_routes_are_refused(device_api):
         register_all(Flask(__name__), Partial)
 
 
-def test_register_all_matches_subclasses(device_api):
+def test_register_all_matches_subclasses(device_api) -> None:
     from device_api.blueprints import api_config, register_all
 
     class View(api_config.ApiConfigView):
-        def authenticate(self, security):
+        def authenticate(self, security) -> None:
             return None
 
-        def handle_get(self, *, x_device_name=None):
+        def handle_get(self, *, x_device_name=None) -> None:
             return None
 
     app = Flask(__name__)
@@ -248,7 +248,7 @@ def test_register_all_matches_subclasses(device_api):
         register_all(Flask(__name__), int)  # type: ignore[arg-type]
 
 
-def test_client_without_session_uses_requests_request(device_api, monkeypatch):
+def test_client_without_session_uses_requests_request(device_api, monkeypatch) -> None:
     from device_api import models
     from device_api.clients import ApiConfigClient
 
@@ -266,12 +266,13 @@ def test_client_without_session_uses_requests_request(device_api, monkeypatch):
     assert calls == [("GET", "http://broker/api/config", {"Authorization": "Bearer t", "X-Device-Name": "n"})]
 
 
-def test_rich_models(pets_api):
+def test_rich_models(pets_api) -> None:
     from pets_api import models
 
     pet = models.NewPet(name="Tom", kind="cat")
     assert pet.weight == 1.5
-    assert pet.birthDate is None and pet.parent is None
+    assert pet.birthDate is None
+    assert pet.parent is None
     with pytest.raises(ValidationError):
         models.NewPet(name="", kind="cat")
     with pytest.raises(ValidationError):
@@ -288,13 +289,13 @@ def test_rich_models(pets_api):
                 "name": "a",
                 "kind": "cat",
                 "parent": {"id": 2, "owner": None, "name": "b", "kind": "dog"},
-            }
+            },
         ).parent.id
         == 2
     )
 
 
-def test_rich_signatures(pets_api):
+def test_rich_signatures(pets_api) -> None:
     import inspect
 
     from pets_api.clients import pets, pets_by_pet_id
@@ -319,7 +320,7 @@ def test_rich_signatures(pets_api):
     ]
 
 
-def test_rich_round_trip(pets_api):
+def test_rich_round_trip(pets_api) -> None:
     from pets_api import models
     from pets_api.blueprints import pets as pets_bp
     from pets_api.blueprints import pets_by_pet_id as by_id_bp
@@ -350,7 +351,7 @@ def test_rich_round_trip(pets_api):
             store[pet_id] = store[pet_id].model_copy(update={"name": body.name})
             return store[pet_id]
 
-        def handle_delete(self, *, pet_id):
+        def handle_delete(self, *, pet_id) -> None:
             del store[pet_id]
 
     app = Flask(__name__)
@@ -375,7 +376,7 @@ def test_rich_round_trip(pets_api):
     assert app.test_client().get("/pets").status_code == 400
 
 
-def test_check_detects_stale_output(tmp_path):
+def test_check_detects_stale_output(tmp_path) -> None:
     out = tmp_path / "gen"
     spec = DEVICE_SPEC
     assert main([str(spec), "--out", str(out)]) == 0
@@ -399,9 +400,10 @@ def _cli(*args, seed):
 
 
 @pytest.mark.parametrize("which", ["device", "rich"])
-def test_output_does_not_depend_on_the_hash_seed(tmp_path, which):
+def test_output_does_not_depend_on_the_hash_seed(tmp_path, which) -> None:
     """Iterating a set is in a different order in every process, so anything generated from one would pass
-    --check where it was written and fail it in CI. The in-process test above can't see that."""
+    --check where it was written and fail it in CI. The in-process test above can't see that.
+    """
     spec = DEVICE_SPEC
     if which == "rich":
         spec = tmp_path / "rich.json"

@@ -1,10 +1,13 @@
 """Writing `clients/<route>.py`: a class per route with one method per HTTP verb."""
 
 import textwrap
+from typing import TYPE_CHECKING
 
 from .emit_models import HEADER, stdlib_import_lines
-from .operations import Operation, Param, Route
 from .writer import WIDTH, CodeWriter, Raw, import_lines, quote
+
+if TYPE_CHECKING:
+    from .operations import Operation, Param, Route
 
 
 def render_client(route: Route, model_names: set[str], source: str) -> str:
@@ -115,7 +118,10 @@ def _docstring_parts(route: Route, operation: Operation) -> list[str | tuple[str
         rows = ["Args:"]
         for name, text in described:
             rows += textwrap.wrap(
-                f"{name}: {' '.join(text.split())}", width=88, initial_indent="    ", subsequent_indent="        "
+                f"{name}: {' '.join(text.split())}",
+                width=88,
+                initial_indent="    ",
+                subsequent_indent="        ",
             )
         parts.append(tuple(rows))
     errors = [str(r.status) for r in operation.responses if not r.is_success]
