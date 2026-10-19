@@ -275,3 +275,39 @@ def test_output_does_not_depend_on_the_hash_seed(tmp_path, which):
     for seed in (2, 3, 4, 5, 6):
         checked = _cli(spec, "--out", out, "--check", seed=seed)
         assert checked.returncode == 0, f"seed {seed} disagrees with seed 1:\n{checked.stderr}"
+
+
+def test_string_constraints_are_quoted_once():
+    """A schema's `pattern` (or any string constraint) is one string literal: the regex itself, no extra quotes."""
+    from openapi_codegen.generate import generate
+
+    document = {
+        "openapi": "3.1.0",
+        "info": {"title": "Patterns", "version": "1"},
+        "paths": {},
+        "components": {
+            "schemas": {
+                "DeviceId": {"type": "string", "pattern": "^[0-9a-f]{12}$"},
+                "Thing": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {
+                        "id": {"$ref": "#/components/schemas/DeviceId"},
+                        "codes": {"type": "array", "items": {"type": "string", "pattern": "^\\d+$"}},
+                    },
+                },
+            }
+        },
+    }
+    source = generate(document)["models.py"]
+    assert 'pattern="^[0-9a-f]{12}$"' in source
+    assert "'\"" not in source
+    namespace: dict = {}
+    exec(compile(source, "models.py", "exec"), namespace)  # noqa: S102 - our own generated code
+    thing = namespace["Thing"]
+    thing.model_rebuild(_types_namespace=namespace)
+    assert thing(id="a1b2c3d4e5f6", codes=["12", "3"]).id == "a1b2c3d4e5f6"
+    with pytest.raises(ValidationError):
+        thing(id="not-hex")
+    with pytest.raises(ValidationError):
+        thing(id="a1b2c3d4e5f6", codes=["x"])

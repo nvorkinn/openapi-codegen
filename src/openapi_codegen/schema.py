@@ -272,7 +272,8 @@ class Schemas:
             limits["lt"] = limits.pop("le")
         if not limits:
             return ref
-        arguments = ", ".join(f"{key}={quote(v) if isinstance(v, str) else v!r}" for key, v in limits.items())
+        # `!r` would apply to the whole conditional, quoting a string twice (pattern='"^a$"'), so call repr itself.
+        arguments = ", ".join(f"{key}={quote(v) if isinstance(v, str) else repr(v)}" for key, v in limits.items())
         return TypeRef(
             f"Annotated[{ref.expr}, Field({arguments})]", ref.deps, ref.imports | {"Annotated", "Field"}, ref.nullable
         )
