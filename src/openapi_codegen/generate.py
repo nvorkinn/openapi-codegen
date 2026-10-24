@@ -124,11 +124,15 @@ def load(path: Path) -> dict[str, Any]:
     """Reads an OpenAPI document: YAML if the file is named .yaml or .yml (which needs PyYAML), otherwise JSON."""
     text = path.read_text()
     if path.suffix.lower() in _YAML_SUFFIXES:
-        return _load_yaml(path, text)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as error:
-        raise SpecError(f"{path} isn't valid JSON: {error}") from error
+        document = _load_yaml(path, text)
+    else:
+        try:
+            document = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise SpecError(f"{path} isn't valid JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise SpecError(f"{path} isn't an OpenAPI document: its top level is {type(document).__name__}, not an object")
+    return document
 
 
 def _load_yaml(path: Path, text: str) -> dict[str, Any]:

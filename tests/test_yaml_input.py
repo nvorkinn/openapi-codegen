@@ -102,6 +102,12 @@ def test_invalid_yaml_is_a_spec_error(tmp_path):
         load(_write(tmp_path, "spec.yaml", "a: [unclosed\n"))
 
 
+@pytest.mark.parametrize(("name", "text"), [("spec.json", "[]"), ("spec.json", "42"), ("spec.yaml", "- a\n")])
+def test_a_document_that_is_not_an_object_is_a_spec_error(tmp_path, name, text):
+    with pytest.raises(SpecError, match="isn't an OpenAPI document"):
+        load(_write(tmp_path, name, text))
+
+
 def test_without_pyyaml_yaml_says_what_to_install_and_json_still_works(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "yaml", None)
     with pytest.raises(SpecError, match="needs PyYAML"):
